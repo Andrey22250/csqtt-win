@@ -1057,12 +1057,12 @@ mod tests {
     }
 
     // =======================================================================
-    // 2. Port of DeployScriptPreflightTest.kt (18 tests)
+    // 2. Port of DeployScriptPreflightTest.kt; the client side is checked against ops.rs (18 tests)
     // =======================================================================
 
-    const SCRIPT: &str = include_str!("../../../app/src/main/assets/deploy.sh");
+    const SCRIPT: &str = include_str!("../../../server/deploy.sh");
     const DEPLOY_OPERATIONS: &str =
-        include_str!("../../../app/src/main/java/com/csqtt/client/ui/DeployOperations.kt");
+        include_str!("ops.rs");
 
     fn script() -> &'static str {
         SCRIPT
@@ -1138,8 +1138,8 @@ mod tests {
             .find("/tmp/.csqtt-upload-server")
             .expect("/tmp/.csqtt-upload-server");
         let i_idx = client
-            .find("bash /tmp/deploy.sh install")
-            .expect("bash /tmp/deploy.sh install");
+            .find("build_deploy_command(req)")
+            .expect("build_deploy_command(req)");
         assert!(u_idx < i_idx);
     }
 
@@ -1216,7 +1216,7 @@ mod tests {
         assert!(!client.contains(".put(\"dns\""));
         assert!(!client.contains("dnsValue"));
         assert!(!deploy.contains("Не удалось сохранить DNS из существующей SQLite-конфигурации"));
-        assert!(client.contains("\"csqtt-deploy.json\" -> \"настройки доступа\""));
+        assert_eq!(deploy_asset_label("csqtt-deploy.json"), "настройки доступа");
     }
 
     #[test]
@@ -1291,7 +1291,7 @@ mod tests {
         assert!(!deploy.contains("nft delete table ip csqtt"));
         assert!(!deploy.contains("fw_add_input_tcp \"$SSH_PORT\""));
         assert!(!deploy.contains("--dport \"$SSH_PORT\" -m comment --comment \"$IPT_COMMENT\""));
-        assert!(client.contains("csqtt-uninstall-"));
+        assert!(client.contains("bash /tmp/deploy.sh uninstall"));
         assert!(!client.contains("pkill -x csqtt"));
         assert!(!client.contains("docker rm -f csqtt"));
         assert!(!client.contains("nft delete table ip csqtt"));

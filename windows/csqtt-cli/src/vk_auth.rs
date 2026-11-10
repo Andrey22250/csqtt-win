@@ -426,6 +426,9 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
     let mut silent_retried = false;
     let mut silent_retry_at: Option<Instant> = None;
     let mut last_url: Option<String> = None;
+    // A failed main-frame navigation is often just a redirect cancelled by the next one;
+    // treat it as a network error only if nothing else starts loading for a while.
+    let mut failed_at: Option<Instant> = None;
 
     let mut handler = |event: WebEvent, ctl: &mut dyn WebCtl| -> Action {
         match event {
@@ -438,6 +441,7 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
                 Action::Continue
             }
             WebEvent::NavigationStarting { url } => {
+                failed_at = None;
                 handle_navigation_url(
                     &url,
                     &mut phase,
@@ -452,6 +456,7 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
             }
             WebEvent::NavigationCompleted { url, success, http_status: _ } => {
                 if success {
+                    failed_at = None;
                     handle_navigation_url(
                         &url,
                         &mut phase,
@@ -478,10 +483,8 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
                     if action != Action::Continue {
                         action
                     } else if !url.contains("blank.html") && outcome.is_none() {
-                        outcome = Some(Err(
-                            "Не удалось открыть страницу авторизации VK — проверьте интернет".to_string(),
-                        ));
-                        Action::Finish("error".to_string())
+                        failed_at.get_or_insert_with(Instant::now);
+                        Action::Continue
                     } else {
                         Action::Continue
                     }
@@ -496,6 +499,14 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
                 Action::Continue
             }
             WebEvent::Tick => {
+                if let Some(at) = failed_at {
+                    if at.elapsed() >= Duration::from_secs(6) && outcome.is_none() {
+                        outcome = Some(Err(
+                            "Не удалось открыть страницу авторизации VK — проверьте интернет".to_string(),
+                        ));
+                        return Action::Finish("error".to_string());
+                    }
+                }
                 // Check if delayed silent retry timer expired
                 if let Some(retry_at) = silent_retry_at {
                     if Instant::now() >= retry_at {

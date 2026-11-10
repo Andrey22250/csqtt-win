@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
-description = "Pure-logic port of the csqtt Android policies (app/src/main/java/com/csqtt/client/*Policy.kt etc.)"
+description = "Pure-logic port of the csqtt Android policies (Kotlin *Policy.kt of the original Android client)"
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }

@@ -124,15 +124,15 @@ build_variant() {
     ZIG_LOCAL_CACHE_DIR="$ROOT/build/zig-cache/$asset/local" \
     CARGO_TARGET_DIR="$ROOT/build/linux-musl" \
     cargo +1.97.1 zigbuild --release --target "$target" "${FEATURE_ARGS[@]}"
-  mkdir -p "$ROOT/dist" "$ROOT/../app/src/main/assets"
+  mkdir -p "$ROOT/dist" "$ROOT/../server"
   cp "$ROOT/build/linux-musl/$target/release/csqtt" "$ROOT/dist/$asset"
-  cp "$ROOT/build/linux-musl/$target/release/csqtt" "$ROOT/../app/src/main/assets/$asset"
+  cp "$ROOT/build/linux-musl/$target/release/csqtt" "$ROOT/../server/$asset"
   ls -lh "$ROOT/dist/$asset"
 }
 build_variant x86_64-unknown-linux-musl x86_64-linux-musl csqtt-linux-amd64
 build_variant aarch64-unknown-linux-musl aarch64-linux-musl csqtt-linux-arm64
 build_variant armv7-unknown-linux-musleabihf armv7-linux-musleabihf csqtt-linux-armv7
-rm -f "$ROOT/../app/src/main/assets/csqtt"
+rm -f "$ROOT/../server/csqtt"
 if command -v pwsh >/dev/null; then
   pwsh -NoProfile -File "$ROOT/../scripts/server_asset_provenance.ps1" -Mode Write
   pwsh -NoProfile -File "$ROOT/../scripts/server_asset_provenance.ps1" -Mode Verify

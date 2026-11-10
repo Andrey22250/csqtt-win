@@ -1,41 +1,49 @@
-<div align="center">
+# csqtt-win
 
-# CSQTT
-
-<br>
-
-<img src="https://img.shields.io/badge/Android-SDK_28--37-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android SDK" />
-<img src="https://img.shields.io/badge/Rust-2024-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust Core" />
-<img src="https://img.shields.io/badge/Kotlin-Compose-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
-<a href="https://github.com/amurcanov/csqtt/stargazers">
-  <img src="https://img.shields.io/github/stars/amurcanov/csqtt?style=for-the-badge&logo=github&color=ffca28&labelColor=24292e" alt="Stars" />
-</a>
-
-[CSQTT Telegram Community](https://t.me/wdttcommunity)
-
-</div>
-
-<br>
-
-**CSQTT** — Android-приложение и высокопроизводительный сервер для создания защищённого туннеля поверх TURN/RTP. Клиент поднимает локальный интерфейс на устройстве, маскируя транспорт под зашифрованный медиатрафик звонка.
-
-**Кросс., проекты с поддержкой CSQTT**: 
-- Windows & Linux порт - [luminescq/focsq](https://github.com/luminescq/focsq)
-- ios совместимый клиент - [anton48/vk-turn-proxy-ios](https://github.com/anton48/vk-turn-proxy-ios)
-
-**Прекрасный аналог csqtt / wdtt**: [hackdiaz-dev/turn-proxy-android](https://github.com/hackdiaz-dev/turn-proxy-android)
+Неофициальный Windows-порт [CSQTT](https://github.com/amurcanov/csqtt): клиент туннеля поверх TURN/RTP, трафик которого выглядит как медиапоток звонка.
 
 > [!WARNING]
-> **Некоммерческий статус и запрет коммерческого использования**
-> Проект является строго некоммерческим исследовательским инструментом и не преследует извлечения выгоды.
-> 
-> Я (**amurcanov**) прямо запрещаю любое использование исходного кода данного репозитория ([github.com/amurcanov/csqtt](https://github.com/amurcanov/csqtt)) в коммерческих целях в соответствии с условиями лицензии **PolyForm Noncommercial License 1.0.0**. Любая продажа, перепродажа, интеграция в платные сервисы или извлечение прибыли на базе данного кода запрещены.
+> **Проект сырой.** Это переделка оригинала под Windows, собранная одним человеком. Она работает на машине автора, но толком не тестировалась. Ждите ошибок, падений и изменений без обратной совместимости. Для стабильной работы используйте оригинальный Android-клиент.
 
-> [!NOTE]
-> Подробная техническая информация и документация по архитектуре **CSQTT** будут опубликованы позже в отдельном окне заметок.
+Оригинал: [amurcanov/csqtt](https://github.com/amurcanov/csqtt), автор amurcanov. Этот форк к оригинальному автору отношения не имеет, вопросы по нему задавайте здесь, а не в апстриме.
 
----
+## Что есть
+
+- Ядро `rust-client` с патчами под Windows: Wintun вместо TUN, сокеты в обход туннеля, исключение приложений.
+- Служба `csqtt-svc` (SYSTEM): адаптер, маршруты, DNS (NRPT), восстановление сети после сбоя.
+- Окно `csqtt.exe` на WebView2 с интерфейсом как у Android-версии, трей и CLI.
+- Вход в ВК, капча, логи с подсчётом повторов, маршрутизация по приложениям.
+- Развёртывание сервера по SSH из Windows (`csqtt-deploy`).
+
+Чего нет или что не работает:
+
+- Нет готовых серверных бинарников в репозитории. Их нужно собрать из `rust-server` (`rust-server/build_linux.bat`, нужны zig и cargo-zigbuild).
+- Android-приложения здесь нет, оно осталось в оригинальном репозитории.
+- Поддерживается только Windows 10 2004+ / 11, x64.
+
+## Структура
+
+| Папка | Что внутри |
+|-------|-----------|
+| `windows/` | Windows-часть: служба, GUI/CLI, логика, IPC, деплой, установщик |
+| `rust-client/` | ядро клиента из апстрима с Windows-патчами (список в `WINDOWS-PATCHES.md`) |
+| `rust-server/` | сервер из апстрима |
+| `shared/` | общий код клиента и сервера |
+| `server/` | `deploy.sh` и лицензии для развёртывания сервера |
+| `scripts/` | сборка пакета и вспомогательные скрипты |
+
+## Сборка
+
+Нужны Rust (MSVC), WebView2 Runtime и, для установщика, Inno Setup 6.
+
+```powershell
+powershell -NoProfile -File scripts\windows\package.ps1
+```
+
+Путь к `ISCC.exe` можно задать переменной `CSQTT_ISCC`. Результат: `dist\csqtt-win-<версия>-setup.exe` и портативный zip.
+
+Подробное руководство пользователя: [windows/README-windows.md](windows/README-windows.md).
 
 ## Лицензия
 
-Этот проект распространяется под лицензией **PolyForm Noncommercial License 1.0.0 (PolyForm-Noncommercial-1.0.0)**.
+Как и оригинал, проект распространяется под **PolyForm Noncommercial License 1.0.0**. Коммерческое использование запрещено, условия в [LICENSE](LICENSE).

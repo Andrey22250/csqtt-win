@@ -2,7 +2,7 @@
 set -eo pipefail
 
 PROJECT_ROOT="/mnt/f/csqtt/csqtt-2.5.0"
-SERVER_BIN="$PROJECT_ROOT/app/src/main/assets/csqtt-linux-amd64"
+SERVER_BIN="$PROJECT_ROOT/server/csqtt-linux-amd64"
 TEST_ELF="$PROJECT_ROOT/rust-server/target/x86_64-unknown-linux-musl/debug/deps/csqtt-a1c8eb2f8f054f72"
 
 echo "============================================================"

@@ -1,5 +1,5 @@
 //! Pure-logic port of the csqtt Android client (no Android/Windows APIs).
-//! Each module mirrors one Kotlin file in app/src/main/java/com/csqtt/client and ports its unit tests.
+//! Each module mirrors one Kotlin file of the original Android client (upstream app/src/main/java/com/csqtt/client) and ports its unit tests.
 
 // p1
 pub mod constants;
