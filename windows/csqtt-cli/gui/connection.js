@@ -45,22 +45,9 @@
     return hh + ":" + mm + ":" + ss;
   }
 
+  // csqtt:// links are base64 of an AES-GCM payload: decoded by the host (csqtt.linkInfo).
   function parseLink(raw) {
-    if (!raw || !raw.startsWith("csqtt://")) return null;
-    try {
-      var queryIdx = raw.indexOf("?");
-      if (queryIdx === -1) return null;
-      var params = new URLSearchParams(raw.slice(queryIdx + 1));
-      return {
-        host: params.get("host") || "",
-        peer: params.get("peer") || "",
-        password: params.get("password") || "",
-        hashes: (params.get("hashes") || "").split(",").filter(function (h) { return h.length >= 16; }),
-        vkAccessToken: params.get("vk_access_token") || ""
-      };
-    } catch (_) {
-      return null;
-    }
+    return window.csqtt.linkInfo(raw);
   }
 
   function renderConnectionScreen(container) {
@@ -200,11 +187,16 @@
       }
 
       if (prof.csqtt_link_mode) {
-        var parsed = parseLink(prof.csqtt_link);
-        if (!parsed) {
-          window.UI.toast("Укажите корректную ссылку csqtt://");
-          return;
-        }
+        window.csqtt.parseLink(prof.csqtt_link).then(function (info) {
+          if (!info) {
+            window.UI.toast("Укажите корректную ссылку csqtt://");
+            return;
+          }
+          window.csqtt.connect().catch(function (err) {
+            window.UI.toast("Ошибка запуска: " + err.message);
+          });
+        });
+        return;
       } else {
         var p = (prof.peer || "").trim();
         if (!p || p === "0.0.0.0" || p === "127.0.0.1" || p === "localhost" || p.indexOf(":") !== -1) {
@@ -230,7 +222,7 @@
         // Participant mode: csqtt_link field
         var linkField = window.UI.textField({
           label: "Ссылка csqtt://",
-          placeholder: "csqtt://connect?v=2&host=ip&peer=порт&password=пароль",
+          placeholder: "csqtt://…",
           value: prof.csqtt_link || "",
           onInput: function (val) {
             prof.csqtt_link = val.trim();

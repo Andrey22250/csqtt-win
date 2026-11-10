@@ -151,34 +151,10 @@
   }
 
   // Helper: Parse csqtt:// link
+  // csqtt:// links are base64 of an AES-GCM payload: decoded by the host (csqtt.linkInfo).
+  // null = invalid, undefined = still being checked.
   function parseCsqttLink(raw) {
-    if (!raw || !raw.startsWith("csqtt://")) return null;
-    try {
-      var queryIdx = raw.indexOf("?");
-      if (queryIdx === -1) return null;
-      var params = new URLSearchParams(raw.slice(queryIdx + 1));
-      var host = params.get("host") || "";
-      var peer = params.get("peer") || "";
-      var port = params.get("port") || "";
-      var password = params.get("password") || "";
-      var rawHashes = params.get("hashes") || "";
-      var hashes = rawHashes.split(",").map(function (h) {
-        return stripVkUrl(h);
-      }).filter(function (h) {
-        return h.length >= 16;
-      });
-      var vkToken = params.get("vk_access_token") || "";
-
-      return {
-        host: host,
-        peer: peer || port,
-        password: password,
-        hashes: hashes,
-        vkAccessToken: vkToken
-      };
-    } catch (_) {
-      return null;
-    }
+    return window.csqtt.linkInfo(raw);
   }
 
   // Normalizes list of hashes
@@ -1182,12 +1158,12 @@
 
     var linkInput = window.UI.textField({
       label: "Ссылка csqtt://",
-      placeholder: "csqtt://connect?v=2&host=ip&peer=порт&password=пароль",
+      placeholder: "csqtt://…",
       value: "",
       onInput: function (val) {
         var cleaned = val.replace(/\s+/g, "");
         var parsed = parseCsqttLink(cleaned);
-        if (cleaned && !parsed) {
+        if (cleaned && parsed === null) {
           linkInput.setError("Неверная ссылка CSQTT v2");
         } else {
           linkInput.setError(null);

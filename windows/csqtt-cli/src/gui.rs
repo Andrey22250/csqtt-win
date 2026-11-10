@@ -388,6 +388,10 @@ async fn dispatch(call: HostCall, out: &Out, procs: &Procs) -> anyhow::Result<Va
             open_external(url);
             Ok(Value::Null)
         }
+        "parse_link" => {
+            let text = call.params.get("link").and_then(Value::as_str).unwrap_or("");
+            Ok(link_summary(text))
+        }
         "service_setup" => {
             let code = tokio::task::spawn_blocking(run_service_setup_elevated).await??;
             anyhow::ensure!(code == 0, "установка службы завершилась с кодом {code}");
@@ -415,6 +419,21 @@ async fn dispatch(call: HostCall, out: &Out, procs: &Procs) -> anyhow::Result<Va
             Ok(Value::Null)
         }
         other => anyhow::bail!("неизвестный метод: {other}"),
+    }
+}
+
+/// Decodes a `csqtt://` link (base64 of an AES-GCM payload) with the same parser the service
+/// uses. The page gets only what it shows: never the password or the token itself.
+/// `null` when the link is invalid.
+fn link_summary(text: &str) -> Value {
+    match csqtt_logic::csqtt_link::parse_csqtt_link(text) {
+        Some(link) => json!({
+            "host": link.host,
+            "port": link.port,
+            "hashes": link.hashes.len(),
+            "has_token": !link.vk_access_token.is_empty(),
+        }),
+        None => Value::Null,
     }
 }
 
@@ -625,6 +644,17 @@ mod tests {
     fn recv_script_joins_and_escapes() {
         let script = recv_script(&["{\"a\":1}".to_string(), "{\"b\":\"x\u{2028}y\"}".to_string()]);
         assert_eq!(script, "window.__csqttHost&&window.__csqttHost.recv([{\"a\":1},{\"b\":\"x\\u2028y\"}])");
+    }
+
+    #[test]
+    fn link_summary_decodes_encrypted_links_without_secrets() {
+        let payload = csqtt_logic::csqtt_link::encrypt_csqtt_payload("connect?v=2&host=203.0.113.7&peer=46000&password=secret");
+        let summary = link_summary(&format!("csqtt://{payload}"));
+        assert_eq!(summary["host"], "203.0.113.7");
+        assert_eq!(summary["port"], 46000);
+        assert!(!summary.to_string().contains("secret"));
+        assert!(link_summary("csqtt://connect?host=1.2.3.4").is_null());
+        assert!(link_summary("").is_null());
     }
 
     #[test]

@@ -24,6 +24,13 @@
 //   csqtt.exportJson(includeSecrets) -> Promise<string>
 //   csqtt.logsTail(n)             -> Promise<string[]>
 //   csqtt.version()               -> Promise<string>
+//   csqtt.parseLink(text)        -> Promise<{host, port, hashes, has_token} | null>  decodes a
+//                                    csqtt:// link with the service's parser (base64 of an AES-GCM
+//                                    payload); null when invalid. Password/token are never returned.
+//   csqtt.linkInfo(text)          -> sync, cached: {host, peer, hashes: Array(n), vkAccessToken}
+//                                    for a valid link, null for an invalid one, undefined while the
+//                                    first parseLink of this text is in flight (a "settings" event
+//                                    is emitted when it lands, so screens re-sync).
 //   csqtt.setupService()          -> Promise<void>  installs (if needed) and starts the service:
 //                                    runs `csqtt-svc.exe setup` elevated (UAC prompt). Rejects with
 //                                    Error(message) when the user declines UAC or setup fails.
@@ -53,6 +60,8 @@
   var listeners = {};
   var pending = {};
   var nextId = 1;
+  var linkCache = {};
+  var linkPending = {};
   var hosted = !!(window.chrome && window.chrome.webview);
 
   function emit(event, data) {
@@ -176,6 +185,36 @@
       return call("version").then(function (r) {
         return r.version;
       });
+    },
+    linkInfo: function (text) {
+      var key = String(text || "").replace(/\s+/g, "");
+      if (!key) return null;
+      if (Object.prototype.hasOwnProperty.call(linkCache, key)) return linkCache[key];
+      if (!linkPending[key]) {
+        linkPending[key] = true;
+        csqtt.parseLink(key).then(
+          function (info) {
+            linkCache[key] = info
+              ? {
+                  host: info.host,
+                  peer: String(info.port),
+                  hashes: new Array(info.hashes || 0).fill(""),
+                  vkAccessToken: info.has_token ? "*" : "",
+                }
+              : null;
+            delete linkPending[key];
+            var app = window.App;
+            if (app && app.state && app.state.settings) emit("settings", { settings: app.state.settings });
+          },
+          function () {
+            delete linkPending[key];
+          }
+        );
+      }
+      return undefined;
+    },
+    parseLink: function (text) {
+      return call("parse_link", { link: text || "" });
     },
     setupService: function () {
       return call("service_setup").then(function () {});

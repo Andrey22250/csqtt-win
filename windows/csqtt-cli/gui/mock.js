@@ -191,6 +191,14 @@
         return;
       }
 
+      if (method === "parse_link") {
+        var link = String(params.link || "").trim();
+        resolve(/^csqtt:\/\/[A-Za-z0-9_\-+\/=]{20,}$/.test(link)
+          ? { host: "203.0.113.7", port: 46000, hashes: 0, has_token: false }
+          : null);
+        return;
+      }
+
       if (method === "service_setup") {
         setTimeout(function () { resolve(null); }, 1500);
         return;
