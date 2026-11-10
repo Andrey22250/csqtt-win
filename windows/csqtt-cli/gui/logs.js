@@ -119,7 +119,7 @@
     if (!viewportEl || !itemsContainerEl || !scrollHeightEl) return;
 
     var total = allLogs.length;
-    scrollHeightEl.style.height = (total * ROW_HEIGHT) + "px";
+    scrollHeightEl.style.height = (84 + total * ROW_HEIGHT) + "px";
 
     if (total === 0) {
       if (emptyStateEl) emptyStateEl.style.display = "flex";
@@ -154,7 +154,7 @@
       var row = document.createElement("div");
       row.className = "log-row";
       row.style.position = "absolute";
-      row.style.top = (i * ROW_HEIGHT) + "px";
+      row.style.top = (12 + i * ROW_HEIGHT) + "px";
       row.style.left = "14px";
       row.style.right = "14px";
       row.style.height = ROW_HEIGHT + "px";

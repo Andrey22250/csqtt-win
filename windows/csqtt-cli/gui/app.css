@@ -1148,9 +1148,11 @@ input, button, select, textarea {
   position: relative;
   flex: 1;
   width: 100%;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 14px 72px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: #3A3F47 transparent;
 }
 
 .logs-virtual-scroll-height {
@@ -1175,7 +1177,7 @@ input, button, select, textarea {
   align-items: flex-start;
   gap: 10px;
   padding: 2px 0;
-  width: 100%;
+  box-sizing: border-box;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 16px;
@@ -1365,4 +1367,12 @@ input, button, select, textarea {
   padding: 14px 16px;
   border-radius: var(--shape-control);
   width: 100%;
+}
+
+.log-row .log-body {
+  flex: 1;
+  min-width: 0;
+}
+.log-count-badge {
+  flex-shrink: 0;
 }

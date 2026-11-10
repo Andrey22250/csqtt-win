@@ -621,7 +621,11 @@ impl Manager {
         // Flush remaining output into the log.
         if let Some(mut rx) = self.lines.take() {
             while let Ok(line) = rx.try_recv() {
-                self.log(strip_timestamp(&line).to_string());
+                // Same path as live output: events are not log text, other lines are core lines.
+                let line = strip_timestamp(&line);
+                if tunnel_event_parser::parse(line).is_none() && !csqtt_logic::tunnel_log_policy::is_internal_recovery(line) {
+                    let _ = self.events.send(ManagerEvent::CoreLine(line.to_string()));
+                }
             }
         }
         self.active = 0;
