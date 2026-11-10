@@ -17,7 +17,7 @@ if (-not $PSScriptDir) {
     $PSScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 }
 
-# Корневой каталог репозитория (D:\Claude main\work\csqtt-src)
+# Корневой каталог репозитория
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptDir '..\..'))
 $RustClientDir = Join-Path $RepoRoot 'rust-client'
 $WindowsDir = Join-Path $RepoRoot 'windows'
@@ -180,7 +180,7 @@ Copy-Item -Path $builtClientExe -Destination (Join-Path $DistVerDir 'client.exe'
 Copy-Item -Path $wintunDll -Destination (Join-Path $DistVerDir 'wintun.dll') -Force
 Copy-Item -Path $wintunLicense -Destination (Join-Path $DistVerDir 'wintun-LICENSE.txt') -Force
 
-# domains.txt (from D:\Claude main\work\csqtt-src\domains.txt)
+# domains.txt
 $domainsPath = Join-Path $RepoRoot 'domains.txt'
 if (Test-Path $domainsPath) {
     Copy-Item -Path $domainsPath -Destination (Join-Path $DistVerDir 'domains.txt') -Force
@@ -188,15 +188,15 @@ if (Test-Path $domainsPath) {
     Write-Warning "Файл domains.txt ($domainsPath) не найден."
 }
 
-# README-windows.md (D:\Claude main\work\csqtt-src\windows\README-windows.md, пишется другим воркером)
+# README-windows.md
 $readmePath = Join-Path $WindowsDir 'README-windows.md'
 if (Test-Path $readmePath) {
     Copy-Item -Path $readmePath -Destination (Join-Path $DistVerDir 'README-windows.md') -Force
 } else {
-    Write-Warning "Файл README-windows.md ($readmePath) не найден (ожидается создание другим воркером)."
+    Write-Warning "Файл README-windows.md ($readmePath) не найден."
 }
 
-# LICENSE (D:\Claude main\work\csqtt-src\LICENSE)
+# LICENSE
 $licensePath = Join-Path $RepoRoot 'LICENSE'
 if (Test-Path $licensePath) {
     Copy-Item -Path $licensePath -Destination (Join-Path $DistVerDir 'LICENSE') -Force
@@ -239,8 +239,8 @@ if ($cmdIscc) {
         }
     }
     if (-not $isccExe) {
-        $candidateToolchain = 'D:\Claude main\toolchains\innosetup\ISCC.exe'
-        if (Test-Path $candidateToolchain) {
+        $candidateToolchain = $env:CSQTT_ISCC
+        if ($candidateToolchain -and (Test-Path $candidateToolchain)) {
             $isccExe = $candidateToolchain
         }
     }

@@ -360,8 +360,8 @@
         title: "Режим кредов",
         selectedKey: prof.vk_auth_mode || "vkcalls",
         options: [
-          { key: "vkcalls", label: "Авто" },
           { key: "legacy", label: "Капча" },
+          { key: "vkcalls", label: "Авто" },
           { key: "auto_js", label: "Авто ВК" }
         ],
         indicatorProvider: function (m) {
@@ -404,8 +404,8 @@
         title: "Транспорт",
         selectedKey: prof.turn_transport || "udp",
         options: [
-          { key: "udp", label: "UDP" },
-          { key: "tcp_tls", label: "TCP" }
+          { key: "tcp_tls", label: "TCP" },
+          { key: "udp", label: "UDP" }
         ],
         onTitleInfo: function () {
           window.UI.infoDialog("Транспорт TURN", "UDP обеспечивает минимальную задержку. TCP используется при блокировках UDP трафика.");

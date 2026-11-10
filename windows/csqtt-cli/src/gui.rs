@@ -362,6 +362,7 @@ async fn subscription_loop(out: Out) {
                         response = client.recv() => match response {
                             Ok(Some(Response::Status { status })) => emit(&out, "status", json!({ "status": status })),
                             Ok(Some(Response::Log { line })) => emit(&out, "log", json!({ "line": line })),
+                            Ok(Some(Response::LogBook { entries })) => emit(&out, "logbook", json!({ "entries": entries })),
                             Ok(Some(Response::Captcha { mode, redirect_uri, session_token })) => {
                                 emit(&out, "captcha", json!({ "active": true }));
                                 tokio::spawn(crate::tray::solve_captcha_task(mode, redirect_uri, session_token, token_tx.clone()));
@@ -387,6 +388,8 @@ async fn dispatch(call: HostCall, out: &Out, procs: &Procs) -> anyhow::Result<Va
                 .map_err(|_| anyhow::anyhow!("служба не ответила вовремя"))?
         }
         "version" => Ok(json!({ "version": env!("CARGO_PKG_VERSION") })),
+        "list_processes" => Ok(tokio::task::spawn_blocking(list_processes).await?),
+        "pick_exe" => Ok(tokio::task::spawn_blocking(pick_exe).await?.map_or(Value::Null, Value::String)),
         "open_url" => {
             let url = call.params.get("url").and_then(Value::as_str).context("нет поля url")?;
             anyhow::ensure!(is_external_url(url), "разрешены только ссылки http и https");
@@ -678,4 +681,75 @@ mod tests {
         assert_eq!(captcha_claim_name("a"), captcha_claim_name("a"));
         assert_ne!(captcha_claim_name("a"), captcha_claim_name("b"));
     }
+}
+
+/// Running processes for the app-exclusion picker: unique by path (or name when the path
+/// is not readable, e.g. system processes), sorted by name.
+fn list_processes() -> Value {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    };
+    use windows::core::PWSTR;
+    let mut seen = std::collections::BTreeMap::<String, Value>::new();
+    // SAFETY: plain ToolHelp/OpenProcess calls; every handle is closed, buffers outlive the calls.
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return json!([]) };
+        let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut ok = Process32FirstW(snap, &mut entry).is_ok();
+        while ok {
+            let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+            let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
+            let mut path = String::new();
+            if entry.th32ProcessID > 4
+                && let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, entry.th32ProcessID)
+            {
+                let mut buf = [0u16; 1024];
+                let mut size = buf.len() as u32;
+                if QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size).is_ok() {
+                    path = String::from_utf16_lossy(&buf[..size as usize]);
+                }
+                let _ = CloseHandle(h);
+            }
+            if name.to_lowercase().ends_with(".exe") {
+                let key = if path.is_empty() { name.to_lowercase() } else { path.to_lowercase() };
+                seen.entry(key).or_insert_with(|| json!({ "name": name, "path": path }));
+            }
+            ok = Process32NextW(snap, &mut entry).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    let mut list: Vec<Value> = seen.into_values().collect();
+    list.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_lowercase());
+    Value::Array(list)
+}
+
+/// Standard "Open file" dialog filtered to .exe; returns the chosen path.
+fn pick_exe() -> Option<String> {
+    use windows::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    };
+    use windows::core::{PCWSTR, PWSTR};
+    let filter: Vec<u16> = "Программы (*.exe)\0*.exe\0\0".encode_utf16().collect();
+    let title = webview::wide("Выберите программу");
+    let mut buf = [0u16; 1024];
+    let mut ofn = OPENFILENAMEW {
+        lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        lpstrFilter: PCWSTR(filter.as_ptr()),
+        lpstrFile: PWSTR(buf.as_mut_ptr()),
+        nMaxFile: buf.len() as u32,
+        lpstrTitle: PCWSTR(title.as_ptr()),
+        Flags: OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
+        ..Default::default()
+    };
+    // SAFETY: ofn points at buffers that live until the call returns.
+    let ok = unsafe { GetOpenFileNameW(&mut ofn) }.as_bool();
+    if !ok {
+        return None;
+    }
+    let len = buf.iter().position(|&c| c == 0).unwrap_or(0);
+    (len > 0).then(|| String::from_utf16_lossy(&buf[..len]))
 }

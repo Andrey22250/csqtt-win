@@ -106,43 +106,6 @@
     return spanNodes;
   }
 
-  function addLogLine(raw) {
-    if (!raw) return;
-    var parsed = parseLogLine(raw);
-
-    // Check duplicate of previous line
-    if (allLogs.length > 0) {
-      var prev = allLogs[allLogs.length - 1];
-      if (prev.raw === parsed.raw) {
-        prev.count++;
-        scheduleRender();
-        return;
-      }
-    }
-
-    allLogs.push(parsed);
-    if (allLogs.length > MAX_LOGS) {
-      allLogs.splice(0, allLogs.length - MAX_LOGS);
-    }
-    scheduleRender();
-  }
-
-  function addLogBatch(lines) {
-    if (!lines || lines.length === 0) return;
-    for (var i = 0; i < lines.length; i++) {
-      var parsed = parseLogLine(lines[i]);
-      if (allLogs.length > 0 && allLogs[allLogs.length - 1].raw === parsed.raw) {
-        allLogs[allLogs.length - 1].count++;
-      } else {
-        allLogs.push(parsed);
-      }
-    }
-    if (allLogs.length > MAX_LOGS) {
-      allLogs.splice(0, allLogs.length - MAX_LOGS);
-    }
-    scheduleRender();
-  }
-
   function scheduleRender() {
     if (isRafScheduled) return;
     isRafScheduled = true;
@@ -330,6 +293,7 @@
       onClick: function () {
         allLogs = [];
         scheduleRender();
+        window.csqtt.clearLogs().catch(function () {});
         window.UI.toast("Логи очищены");
       }
     });
@@ -346,22 +310,33 @@
     });
 
     // Fetch initial logs tail
-    window.csqtt.logsTail(500).then(function (lines) {
-      if (lines && lines.length > 0) {
-        addLogBatch(lines);
-      }
-    }).catch(function (err) {
-      console.warn("logsTail error:", err);
+    window.csqtt.logBook().then(setBook).catch(function (err) {
+      console.warn("logBook error:", err);
     });
 
     scheduleRender();
   }
 
   // Subscribe to live log events
-  window.csqtt.on("log", function (data) {
-    if (data && data.line) {
-      addLogLine(data.line);
-    }
+  // Live log view: the service keeps keyed entries (Android TunnelManager) and sends the
+  // whole sorted list on every change, so a repeated line updates its entry in place.
+  function setBook(entries) {
+    if (!Array.isArray(entries)) return;
+    allLogs = entries.map(function (e) {
+      var item = parseLogLine(e.message);
+      item.count = e.count || 1;
+      if (e.is_error && !item.isError) {
+        item.isError = true;
+        item.isGreen = false;
+        item.tagType = "error";
+      }
+      return item;
+    });
+    scheduleRender();
+  }
+
+  window.csqtt.on("logbook", function (data) {
+    if (data) setBook(data.entries);
   });
 
   // Register Logs Screen

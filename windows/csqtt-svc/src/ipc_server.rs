@@ -8,8 +8,9 @@ use tokio_util::sync::CancellationToken;
 
 use csqtt_ipc::pipe::{Listener, ServerConn};
 use csqtt_ipc::{
-    Request, Response, StatusInfo, TunnelState, PROTOCOL_VERSION,
+    LogBookEntry, Request, Response, StatusInfo, TunnelState, PROTOCOL_VERSION,
 };
+use csqtt_logic::log_book::{CoreLineClassifier, LogBook};
 use csqtt_logic::settings::{export_config_json, SecretKey, Settings};
 
 use crate::manager::{ManagerEvent, ManagerHandle, Request as MgrRequest, Status as MgrStatus};
@@ -22,6 +23,7 @@ pub const MAX_LOG_LINES: usize = 2000;
 pub enum ServerBroadcastEvent {
     Status(StatusInfo),
     Log(String),
+    LogBook(Vec<LogBookEntry>),
     Captcha {
         mode: String,
         redirect_uri: String,
@@ -34,6 +36,9 @@ pub enum ServerBroadcastEvent {
 pub struct ServerState {
     pub status: StatusInfo,
     pub logs: VecDeque<String>,
+    pub book: LogBook,
+    pub classifier: CoreLineClassifier,
+    pub logging_enabled: bool,
 }
 
 impl Default for ServerState {
@@ -41,6 +46,11 @@ impl Default for ServerState {
         Self {
             status: StatusInfo::default(),
             logs: VecDeque::with_capacity(MAX_LOG_LINES),
+            book: LogBook::new(),
+            classifier: CoreLineClassifier::new(),
+            logging_enabled: settings_file::load_json::<Settings>(paths::settings_path())
+                .map(|s| s.logging_enabled)
+                .unwrap_or(true),
         }
     }
 }
@@ -83,6 +93,41 @@ pub fn apply_status(info: &mut StatusInfo, status: &MgrStatus) {
 }
 
 /// Appends a log line to the ring buffer, preserving at most MAX_LOG_LINES.
+/// Feeds one log line into the keyed log book (Android TunnelManager logic). Lines the
+/// classifier does not know (service messages, plain core output) get their own entry keyed
+/// by the text, so an identical repeat bumps its counter instead of appending.
+pub fn book_add_line(state: &mut ServerState, line: &str) -> bool {
+    let updates = state.classifier.classify(line);
+    let enabled = state.logging_enabled;
+    if updates.is_empty() {
+        let text = line.trim();
+        if text.is_empty() {
+            return false;
+        }
+        let lower = text.to_lowercase();
+        let is_error = lower.contains("ошибка") || lower.contains("error") || lower.contains("fail");
+        return state.book.update(&format!("line:{text}"), text, 90, is_error, None, enabled);
+    }
+    let mut changed = false;
+    for u in &updates {
+        changed |= state.book.update_from(u, enabled);
+    }
+    changed
+}
+
+pub fn book_entries(book: &LogBook) -> Vec<LogBookEntry> {
+    book.entries()
+        .iter()
+        .map(|e| LogBookEntry {
+            key: e.key.clone(),
+            message: e.message.clone(),
+            count: e.count,
+            priority: e.priority,
+            is_error: e.is_error,
+        })
+        .collect()
+}
+
 pub fn push_log_line(logs: &mut VecDeque<String>, line: String) {
     if logs.len() >= MAX_LOG_LINES {
         logs.pop_front();
@@ -136,6 +181,7 @@ pub async fn serve(
                             Ok(ManagerEvent::Stats { active, bytes_up, bytes_down }) => {
                                 let mut guard = state.lock().await;
                                 guard.status.active_workers = active;
+                                guard.classifier.set_active_workers(u32::try_from(active).unwrap_or(0));
                                 guard.status.bytes_up = bytes_up;
                                 guard.status.bytes_down = bytes_down;
                                 let current = guard.status.clone();
@@ -145,8 +191,13 @@ pub async fn serve(
                             Ok(ManagerEvent::Log(line)) => {
                                 let mut guard = state.lock().await;
                                 push_log_line(&mut guard.logs, line.clone());
+                                let changed = book_add_line(&mut guard, &line);
+                                let entries = changed.then(|| book_entries(&guard.book));
                                 drop(guard);
                                 let _ = event_tx.send(ServerBroadcastEvent::Log(line));
+                                if let Some(entries) = entries {
+                                    let _ = event_tx.send(ServerBroadcastEvent::LogBook(entries));
+                                }
                             }
                             Ok(ManagerEvent::CaptchaRequest { mode, redirect_uri, session_token }) => {
                                 if subscribers.load(Ordering::SeqCst) == 0 {
@@ -306,7 +357,7 @@ async fn run_logs_follow(
                             break;
                         }
                     }
-                    Ok(ServerBroadcastEvent::Captcha { .. }) => {}
+                    Ok(ServerBroadcastEvent::Captcha { .. }) | Ok(ServerBroadcastEvent::LogBook(_)) => {}
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
@@ -352,6 +403,11 @@ async fn run_subscribe(
                     }
                     Ok(ServerBroadcastEvent::Log(line)) => {
                         if conn.send(&Response::Log { line }).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(ServerBroadcastEvent::LogBook(entries)) => {
+                        if conn.send(&Response::LogBook { entries }).await.is_err() {
                             break;
                         }
                     }
@@ -478,6 +534,7 @@ async fn handle_one_shot(
         Request::SetSettings { settings } => {
             match serde_json::from_value::<Settings>(settings) {
                 Ok(val) => {
+                    state.lock().await.logging_enabled = val.logging_enabled;
                     if let Err(e) = settings_file::save_json(paths::settings_path(), &val) {
                         Response::Error {
                             message: format!("не удалось сохранить настройки: {e}"),
@@ -499,6 +556,16 @@ async fn handle_one_shot(
                     message: format!("не удалось сохранить секрет: {e}"),
                 },
             }
+        }
+        Request::LogBook => {
+            let guard = state.lock().await;
+            Response::LogBook { entries: book_entries(&guard.book) }
+        }
+        Request::ClearLogs => {
+            let mut guard = state.lock().await;
+            guard.book.clear();
+            guard.logs.clear();
+            Response::Ok
         }
         Request::Logs { .. } | Request::Subscribe => Response::Ok,
     }

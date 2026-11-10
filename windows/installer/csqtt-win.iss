@@ -24,8 +24,10 @@
 AppId={{B52A7D2C-82BE-4C70-9884-26EFE496690B}
 AppName=csqtt-win
 AppVersion={#AppVersion}
-AppPublisher=amurcanov
-AppSupportURL=https://github.com/amurcanov/csqtt
+AppPublisher=Andrey22250
+AppSupportURL=https://github.com/Andrey22250/csqtt
+UninstallDisplayIcon={app}\csqtt.exe
+CloseApplications=yes
 DefaultDirName={autopf}\csqtt-win
 DefaultGroupName=csqtt-win
 DisableProgramGroupPage=yes
@@ -47,17 +49,20 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 ; --- User-facing Messages ---
 [CustomMessages]
 ru.AutoStartTray=Запускать трей при входе
-ru.LaunchTrayNow=Запустить csqtt (трей) сейчас
+ru.LaunchTrayNow=Запустить csqtt
+ru.DesktopIcon=Ярлык на рабочем столе
 ru.DeleteUserDataPrompt=Удалить пользовательские данные (настройки, секреты, журналы в %%ProgramData%%\csqtt-win и кэш WebView2 в %%LOCALAPPDATA%%\csqtt-win)?
 ru.WebView2MissingWarning=Microsoft Edge WebView2 Runtime не обнаружен.%n%nОкна решения капчи и авторизации VK требуют наличия WebView2 Runtime.%nВы можете скачать и установить его по ссылке:%nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703%n%nУстановка будет продолжена.
 
 en.AutoStartTray=Start tray application on login
-en.LaunchTrayNow=Launch csqtt (tray) now
+en.LaunchTrayNow=Launch csqtt
+en.DesktopIcon=Desktop shortcut
 en.DeleteUserDataPrompt=Do you want to delete user data (settings, secrets, logs in %%ProgramData%%\csqtt-win and WebView2 cache in %%LOCALAPPDATA%%\csqtt-win)?
 en.WebView2MissingWarning=Microsoft Edge WebView2 Runtime was not detected.%n%nCaptcha and VK authorization windows require Microsoft Edge WebView2 Runtime.%nYou can download and install it from:%nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703%n%nSetup will continue.
 
 ; --- Optional Tasks ---
 [Tasks]
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"
 Name: "autostart"; Description: "{cm:AutoStartTray}"; Flags: unchecked
 
 ; --- Registry Entries ---
@@ -76,10 +81,14 @@ Source: "{#SourceDir}\README-windows.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 ; --- Run After Installation ---
+[Icons]
+Name: "{group}\csqtt"; Filename: "{app}\csqtt.exe"
+Name: "{autodesktop}\csqtt"; Filename: "{app}\csqtt.exe"; Tasks: desktopicon
+
 [Run]
-Filename: "{app}\csqtt-svc.exe"; Parameters: "install"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "start csqtt-win"; Flags: runhidden
-Filename: "{app}\csqtt.exe"; Parameters: "tray"; Description: "{cm:LaunchTrayNow}"; Flags: nowait postinstall runasoriginaluser
+; setup installs or updates the service, lets interactive users start/stop it and starts it
+Filename: "{app}\csqtt-svc.exe"; Parameters: "setup"; Flags: runhidden waituntilterminated
+Filename: "{app}\csqtt.exe"; Description: "{cm:LaunchTrayNow}"; Flags: nowait postinstall runasoriginaluser
 
 ; --- Uninstall Process Execution ---
 [UninstallRun]

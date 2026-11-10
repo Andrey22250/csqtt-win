@@ -34,6 +34,8 @@
 //   csqtt.setupService()          -> Promise<void>  installs (if needed) and starts the service:
 //                                    runs `csqtt-svc.exe setup` elevated (UAC prompt). Rejects with
 //                                    Error(message) when the user declines UAC or setup fails.
+//   csqtt.listProcesses()         -> Promise<[{name, path}]>  running .exe processes (path "" if unreadable)
+//   csqtt.pickExe()               -> Promise<string|null>  standard open-file dialog for .exe
 //   csqtt.uninstallService()      -> Promise<void>  stops and removes the service (UAC prompt):
 //                                    `csqtt-svc.exe uninstall` + `cleanup`. The app files stay.
 //   csqtt.openUrl(url)            -> Promise<void>  http/https only, opens the default browser
@@ -51,6 +53,7 @@
 //                                      "paused"|"failed", message, client_ip, dns,
 //                                      active_workers, bytes_up, bytes_down}
 //   "log"      {line: string}         one new log line
+//   "logbook"  {entries: [{key, message, count, priority, is_error}]}  live log view, full list
 //   "captcha"  {active: bool}         a captcha window was opened / finished
 //
 // Without the host (page opened in a normal browser) the bridge switches to the mock from
@@ -178,6 +181,12 @@
         return r.json;
       });
     },
+    logBook: function () {
+      return ipc({ cmd: "log_book" }).then(function (r) { return r.entries || []; });
+    },
+    clearLogs: function () {
+      return ipc({ cmd: "clear_logs" });
+    },
     logsTail: function (count) {
       return ipc({ cmd: "logs", follow: false, tail: count || 500 }).then(function (r) {
         return r.lines || [];
@@ -223,6 +232,12 @@
     },
     uninstallService: function () {
       return call("service_uninstall").then(function () {});
+    },
+    listProcesses: function () {
+      return call("list_processes");
+    },
+    pickExe: function () {
+      return call("pick_exe");
     },
     openUrl: function (url) {
       return call("open_url", { url: url });

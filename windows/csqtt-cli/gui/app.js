@@ -536,6 +536,30 @@
           }
         });
         content.appendChild(profDropdown);
+        var ownerRow = window.UI.h("div", { style: { display: "flex", gap: "8px" } });
+        ownerRow.appendChild(window.UI.button({
+          text: "Имя профиля", variant: "outlined",
+          onClick: function () {
+            var idx = state.settings.active_profile || 0;
+            var cur = (state.settings.profiles[idx] || {}).profile_name || ("Профиль " + idx);
+            window.SettingsDialogs.profileName(idx, cur, function (i, name) {
+              saveSettings(function (s) { if (s.profiles[i]) s.profiles[i].profile_name = name; }).then(rebuild).catch(function () {});
+            });
+          }
+        }));
+        ownerRow.appendChild(window.UI.button({
+          text: "Выбор TURN подсетей", variant: "outlined",
+          onClick: function () {
+            var p = profile() || {};
+            window.SettingsDialogs.turnSubnets(p.selected_turn_subnet, p.turn_subnet_ip_limit, function (subId, limit) {
+              saveSettings(function (s) {
+                var pr = s.profiles[s.active_profile || 0];
+                if (pr) { pr.selected_turn_subnet = subId; pr.turn_subnet_ip_limit = limit; }
+              }).then(function () { window.UI.toast("Настройки подсетей TURN сохранены"); });
+            });
+          }
+        }));
+        content.appendChild(ownerRow);
       }
 
       // Fingerprint

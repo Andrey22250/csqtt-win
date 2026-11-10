@@ -148,10 +148,18 @@
     if (emitFn) emitFn("status", { status: JSON.parse(JSON.stringify(mockStatus)) });
   }
 
+  var mockBook = [];
+
   function emitLog(line) {
     mockLogs.push(line);
     if (mockLogs.length > 5000) mockLogs.shift();
     if (emitFn) emitFn("log", { line: line });
+    // Same keyed behaviour as the service: one entry per distinct line, repeats bump the count.
+    var key = "line:" + line;
+    var found = mockBook.filter(function (e) { return e.key === key; })[0];
+    if (found) found.count++;
+    else mockBook.push({ key: key, message: line, count: 1, priority: 90, is_error: /ERR|ОШИБКА/.test(line) });
+    if (emitFn) emitFn("logbook", { entries: JSON.parse(JSON.stringify(mockBook)) });
   }
 
   function start(emit) {
@@ -199,6 +207,16 @@
         return;
       }
 
+      if (method === "list_processes") {
+        resolve([{ name: "chrome.exe", path: "C:/Program Files/Google/Chrome/Application/chrome.exe" },
+                 { name: "Telegram.exe", path: "C:/Users/u/AppData/Roaming/Telegram Desktop/Telegram.exe" },
+                 { name: "svchost.exe", path: "" }]);
+        return;
+      }
+      if (method === "pick_exe") {
+        setTimeout(function () { resolve("C:/Games/game.exe"); }, 300);
+        return;
+      }
       if (method === "service_uninstall") {
         setTimeout(function () { resolve(null); }, 1000);
         return;
@@ -302,8 +320,14 @@
           return;
         }
 
-        if (cmd === "logs_clear") {
+        if (cmd === "log_book") {
+          resolve({ type: "log_book", entries: JSON.parse(JSON.stringify(mockBook)) });
+          return;
+        }
+
+        if (cmd === "clear_logs") {
           mockLogs = [];
+          mockBook = [];
           resolve({ type: "ok" });
           return;
         }

@@ -252,6 +252,50 @@
 
   // --- Dialog: Apps Management (Windows adaptation) ---
 
+  // Running-process picker: search box + list; a click adds the full path (or the name).
+  function showProcessPicker(onPick) {
+    var box = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", width: "100%" } });
+    var search = window.UI.h("input", {
+      className: "m3-field-input",
+      attrs: { type: "text", placeholder: "Поиск процесса", autocomplete: "off", spellcheck: "false" },
+    });
+    var searchWrap = window.UI.h("div", { className: "m3-field-container", style: { height: "44px" } }, [search]);
+    var list = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", maxHeight: "340px", overflowY: "auto" } });
+    box.appendChild(searchWrap); box.appendChild(list);
+    var all = [];
+    var dlg;
+    function render() {
+      var q = search.value.trim().toLowerCase();
+      list.innerHTML = "";
+      var shown = all.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) >= 0 || p.path.toLowerCase().indexOf(q) >= 0; });
+      if (shown.length === 0) {
+        list.appendChild(window.UI.h("div", { className: "body-medium text-muted", text: all.length ? "Ничего не найдено" : "Загрузка…" }));
+        return;
+      }
+      shown.forEach(function (p) {
+        var row = window.UI.h("button", {
+          className: "m3-button text",
+          attrs: { type: "button", title: p.path || p.name },
+          style: { justifyContent: "flex-start", textAlign: "left", height: "auto", padding: "6px 10px", flexDirection: "column", alignItems: "flex-start" }
+        }, [
+          window.UI.h("span", { className: "body-medium", text: p.name }),
+          window.UI.h("span", { className: "label-small text-muted", text: p.path || "путь недоступен — будет добавлено имя", style: { wordBreak: "break-all" } })
+        ]);
+        row.addEventListener("click", function () { onPick(p.path || p.name); if (dlg) dlg.close(); });
+        list.appendChild(row);
+      });
+    }
+    search.addEventListener("input", render);
+    dlg = window.UI.dialog({
+      title: "Запущенные программы",
+      content: box,
+      actions: [{ text: "Закрыть", variant: "text", onClick: function (d) { d.close(); } }]
+    });
+    render();
+    window.csqtt.listProcesses().then(function (r) { all = Array.isArray(r) ? r : []; if (!all.length) all = []; render(); })
+      .catch(function (e) { list.innerHTML = ""; list.appendChild(window.UI.h("div", { className: "body-medium", text: "Ошибка: " + (e && e.message || e) })); });
+  }
+
   function showAppsDialog() {
     var p = window.App.profile() || {};
     var isWhite = !!p.is_whitelist;
@@ -327,6 +371,23 @@
     });
     addContainer.appendChild(errorEl);
     content.appendChild(addContainer);
+
+    // Quick pickers: running processes and a file dialog
+    var pickRow = window.UI.h("div", { style: { display: "flex", gap: "8px", width: "100%" } });
+    var procBtn = window.UI.button({
+      text: "Из запущенных", variant: "outlined", icon: "FilterList",
+      onClick: function () { showProcessPicker(function (path) { addApp(path, false); }); }
+    });
+    var exeBtn = window.UI.button({
+      text: "Выбрать exe…", variant: "outlined", icon: "ImportExport",
+      onClick: function () {
+        window.csqtt.pickExe().then(function (path) { if (path) addApp(path, false); })
+          .catch(function (e) { setError(String(e && e.message || e)); });
+      }
+    });
+    procBtn.style.flex = "1"; exeBtn.style.flex = "1";
+    pickRow.appendChild(procBtn); pickRow.appendChild(exeBtn);
+    content.appendChild(pickRow);
 
     // Counter Label
     var counterEl = window.UI.h("div", {
@@ -463,8 +524,11 @@
     }
 
     function handleAdd() {
+      addApp(inputEl.value, true);
+    }
+
+    function addApp(raw, fromInput) {
       setError(null);
-      var raw = inputEl.value;
       var clean = cleanAppName(raw);
 
       if (!clean) {
@@ -489,7 +553,7 @@
       var next = activeList.slice();
       next.push(clean);
       setActiveList(next);
-      inputEl.value = "";
+      if (fromInput) inputEl.value = "";
       setError(null);
       saveState();
       renderList();

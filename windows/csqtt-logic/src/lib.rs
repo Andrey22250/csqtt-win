@@ -12,6 +12,7 @@ pub mod tunnel_log_policy;
 pub mod tunnel_startup_progress;
 // p3
 pub mod tunnel_lifecycle_state;
+pub mod log_book;
 pub mod worker_count_policy;
 pub mod worker_recovery_policy;
 pub mod connection_start_policy;

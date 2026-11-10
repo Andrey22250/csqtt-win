@@ -39,6 +39,10 @@ pub enum Request {
     /// Full settings object (as returned by GetSettings) to store.
     SetSettings { settings: serde_json::Value },
     SetSecret { key: String, value: String },
+    /// Keyed log entries (the live log view): answered with `Response::LogBook`.
+    LogBook,
+    /// Clears the log book and the raw log buffer.
+    ClearLogs,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +93,18 @@ pub enum Response {
     Settings { settings: serde_json::Value },
     Exported { json: String },
     Captcha { mode: String, redirect_uri: String, session_token: String },
+    /// Full keyed log list, sorted for display; also streamed to subscribers on change.
+    LogBook { entries: Vec<LogBookEntry> },
+}
+
+/// One entry of the live log view: a repeated line updates its entry instead of appending.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogBookEntry {
+    pub key: String,
+    pub message: String,
+    pub count: u32,
+    pub priority: i32,
+    pub is_error: bool,
 }
 
 /// Serialize one message as a protocol line (JSON + '\n').
