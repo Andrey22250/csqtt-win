@@ -26,7 +26,7 @@ if (-not $ProjectRoot) {
 }
 
 if (-not $AssetsDir) {
-    $AssetsDir = Join-Path $ProjectRoot "app\src\main\assets"
+    $AssetsDir = Join-Path $ProjectRoot "server"
 }
 New-Item -ItemType Directory -Force -Path $AssetsDir | Out-Null
 

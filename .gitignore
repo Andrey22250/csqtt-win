@@ -1,0 +1,6 @@
+dist/
+scripts/windows/cache/
+.vscode/
+BRIEF.md
+CLAUDE.md
+target/

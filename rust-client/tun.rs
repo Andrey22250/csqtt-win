@@ -1,3 +1,4 @@
+#![cfg_attr(windows, allow(unused_imports))]
 use anyhow::{Result, bail};
 use std::fs::File;
 use tokio_util::sync::CancellationToken;
@@ -186,10 +187,16 @@ fn configure_nonblocking(descriptor: std::os::fd::BorrowedFd<'_>) -> Result<()> 
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+#[path = "tun_windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub use windows::{FdReceiver, TunSession};
+
+#[cfg(not(any(unix, windows)))]
 pub struct FdReceiver;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 impl FdReceiver {
     pub fn bind(_name: &str) -> Result<Self> {
         bail!("TUN FD transport is available only on Android and Unix")

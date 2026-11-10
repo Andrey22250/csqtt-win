@@ -16,7 +16,7 @@ else {
     $projectRoot = [IO.Path]::GetFullPath($Root)
 }
 
-$assetDirectory = Join-Path $projectRoot "app\src\main\assets"
+$assetDirectory = Join-Path $projectRoot "server"
 $manifestPath = Join-Path $assetDirectory "csqtt.server-provenance.json"
 $cargoTomlPath = Join-Path $projectRoot "rust-server\Cargo.toml"
 $cargoLockPath = Join-Path $projectRoot "rust-server\Cargo.lock"

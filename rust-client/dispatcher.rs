@@ -9,6 +9,7 @@ use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapOption};
 use crossbeam_queue::ArrayQueue;
 use socket2::SockRef;
+#[cfg_attr(windows, allow(unused_imports))]
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -950,7 +951,7 @@ impl Dispatcher {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     async fn run_tun(
         self: &Arc<Self>,
         _file: File,
@@ -2314,3 +2315,7 @@ mod tests {
         assert!(state.cursor < 20);
     }
 }
+
+#[cfg(windows)]
+#[path = "dispatcher_windows.rs"]
+mod windows_tun;

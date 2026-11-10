@@ -778,6 +778,9 @@ async fn connect_transport(
                         SocketAddr::from(([0u16; 8], 0))
                     };
                     let socket = Arc::new(UdpSocket::bind(bind).await.context("TURN UDP bind")?);
+                    #[cfg(windows)]
+                    crate::platform_windows::prepare_udp(&*socket, server.is_ipv6())
+                        .context("TURN UDP prepare")?;
                     configure_udp_socket_buffers(&socket);
                     socket
                         .connect(server)

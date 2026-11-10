@@ -312,6 +312,8 @@ async fn query_dns_server(server: SocketAddr, query: Vec<u8>, query_id: u16) -> 
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
         .await
         .context("создание UDP-сокета DNS")?;
+    #[cfg(windows)]
+    crate::platform_windows::prepare_udp(&socket, false).context("DNS UDP prepare")?;
     socket
         .send_to(&query, server)
         .await

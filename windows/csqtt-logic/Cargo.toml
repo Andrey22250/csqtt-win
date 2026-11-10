@@ -1,0 +1,16 @@
+[package]
+name = "csqtt-logic"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Pure-logic port of the csqtt Android policies (Kotlin *Policy.kt of the original Android client)"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+rand = "0.10.2"
+aes-gcm = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+base64 = "0.22"

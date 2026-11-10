@@ -676,6 +676,8 @@ fn build_browser_client(
         .cookie_provider(cookie_jar)
         .redirect(primp::redirect::Policy::limited(10))
         .dns_resolver(dns::global());
+    #[cfg(windows)]
+    { builder = builder.local_address(crate::platform_windows::bypass_local_ip()); }
     if captcha_order {
         let pseudo = PseudoOrder::builder()
             .push(PseudoId::Method)

@@ -14,6 +14,11 @@ mod logging;
 mod namegen;
 mod obfs;
 mod packet;
+#[cfg(windows)]
+#[path = "app_exclude_windows.rs"]
+pub mod app_exclude_windows;
+#[cfg(windows)]
+mod platform_windows;
 mod profiles;
 mod protocol;
 mod repair;
@@ -828,7 +833,9 @@ fn start_parent_monitor(cancel: CancellationToken) -> tokio::task::JoinHandle<()
                 }
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        platform_windows::watch_parent(cancel).await;
+        #[cfg(not(any(unix, windows)))]
         cancel.cancelled().await;
     })
 }
