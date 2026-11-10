@@ -329,7 +329,6 @@
       className: "logs-action-btn",
       onClick: function () {
         allLogs = [];
-        window.csqtt.ipc({ cmd: "logs_clear" }).catch(function () {});
         scheduleRender();
         window.UI.toast("Логи очищены");
       }

@@ -358,15 +358,15 @@
       // Dropdown: VK auth mode (calls, captcha, auto_js)
       var authModeDropdown = window.UI.dropdown({
         title: "Режим кредов",
-        selectedKey: prof.vk_auth_mode || "calls",
+        selectedKey: prof.vk_auth_mode || "vkcalls",
         options: [
-          { key: "calls", label: "Авто" },
-          { key: "captcha", label: "Капча" },
+          { key: "vkcalls", label: "Авто" },
+          { key: "legacy", label: "Капча" },
           { key: "auto_js", label: "Авто ВК" }
         ],
         indicatorProvider: function (m) {
-          if (m === "captcha") return { progress: 0.3, color: "#E53935" };
-          if (m === "calls") return { progress: 0.78, color: "#43A047" };
+          if (m === "legacy") return { progress: 0.3, color: "#E53935" };
+          if (m === "vkcalls") return { progress: 0.78, color: "#43A047" };
           return { progress: 1.0, color: "#1475FD" };
         },
         onTitleInfo: function () {
@@ -384,10 +384,10 @@
       // Dropdown: SRTP Mode
       var srtpDropdown = window.UI.dropdown({
         title: "Режим SRTP",
-        selectedKey: prof.srtp_mode || "wrap",
+        selectedKey: prof.srtp_mode || "auto",
         options: [
-          { key: "wrap", label: "WRAP-SRTP" },
-          { key: "dtls", label: "DTLS-SRTP" },
+          { key: "wrap-srtp", label: "WRAP-SRTP" },
+          { key: "dtls-srtp", label: "DTLS-SRTP" },
           { key: "auto", label: "Авто" }
         ],
         onSelected: function (mode) {
@@ -405,7 +405,7 @@
         selectedKey: prof.turn_transport || "udp",
         options: [
           { key: "udp", label: "UDP" },
-          { key: "tcp", label: "TCP" }
+          { key: "tcp_tls", label: "TCP" }
         ],
         onTitleInfo: function () {
           window.UI.infoDialog("Транспорт TURN", "UDP обеспечивает минимальную задержку. TCP используется при блокировках UDP трафика.");

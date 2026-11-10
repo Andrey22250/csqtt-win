@@ -5,6 +5,7 @@ mod captcha;
 mod vk_auth;
 mod deploy_cmd;
 mod gui;
+mod svc_control;
 
 use std::path::{Path, PathBuf};
 

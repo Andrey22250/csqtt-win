@@ -27,7 +27,7 @@ use crate::webview::{self, Action, Options, WebCtl, WebEvent, WebViewError};
 
 /// Window title; also used to find and raise an already running window.
 pub const WINDOW_TITLE: &str = "csqtt-win";
-const INSTANCE_MUTEX: &str = "Local\\csqtt-win-gui";
+const INSTANCE_MUTEX: &str = crate::svc_control::GUI_MUTEX;
 /// Subcommands of our own exe the page may start through `proc_start`.
 const ALLOWED_SUBCOMMANDS: &[&str] = &["vk-login", "vk-logout", "deploy", "undeploy", "update-check"];
 const TICK: Duration = Duration::from_millis(16);
@@ -128,6 +128,8 @@ pub fn run_gui() -> anyhow::Result<()> {
     );
     let dir = prepare_assets()?;
     let url = file_url(&dir.join("index.html"));
+    // The service lives while the app is open: start it now (no UAC, see svc_control).
+    std::thread::spawn(crate::svc_control::start_service);
 
     let (call_tx, call_rx) = tokio::sync::mpsc::unbounded_channel::<HostCall>();
     let (out_tx, out_rx) = std_mpsc::channel::<String>();
@@ -186,7 +188,10 @@ pub fn run_gui() -> anyhow::Result<()> {
         Action::Continue
     };
 
-    match webview::run(options, &mut handler) {
+    let result = webview::run(options, &mut handler);
+    // Window closed: stop the service unless the tray keeps the app running.
+    crate::svc_control::stop_if_last(crate::svc_control::TRAY_MUTEX);
+    match result {
         Ok(_) | Err(WebViewError::Closed) | Err(WebViewError::Timeout) => Ok(()),
         Err(err) => Err(anyhow::anyhow!("{err}")),
     }
@@ -393,8 +398,16 @@ async fn dispatch(call: HostCall, out: &Out, procs: &Procs) -> anyhow::Result<Va
             Ok(link_summary(text))
         }
         "service_setup" => {
-            let code = tokio::task::spawn_blocking(run_service_setup_elevated).await??;
+            let code = tokio::task::spawn_blocking(|| run_svc_elevated("setup")).await??;
             anyhow::ensure!(code == 0, "установка службы завершилась с кодом {code}");
+            Ok(Value::Null)
+        }
+        "service_uninstall" => {
+            // `uninstall` stops the service (tunnel, routes and DNS are torn down) and deletes
+            // it; `cleanup` removes what a crashed service could have left behind.
+            let code = tokio::task::spawn_blocking(|| run_svc_elevated("uninstall")).await??;
+            anyhow::ensure!(code == 0, "удаление службы завершилось с кодом {code}");
+            let _ = tokio::task::spawn_blocking(|| run_svc_elevated("cleanup")).await;
             Ok(Value::Null)
         }
         "proc_start" => proc_start(call.id, &call.params, out, procs).await,
@@ -437,9 +450,9 @@ fn link_summary(text: &str) -> Value {
     }
 }
 
-/// Runs `csqtt-svc.exe setup` (next to this exe) with the UAC prompt, hidden, and waits for
+/// Runs `csqtt-svc.exe <action>` (next to this exe) with the UAC prompt, hidden, and waits for
 /// it. Returns its exit code.
-fn run_service_setup_elevated() -> anyhow::Result<u32> {
+fn run_svc_elevated(action: &str) -> anyhow::Result<u32> {
     use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{GetExitCodeProcess, INFINITE, WaitForSingleObject};
     use windows::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
@@ -451,7 +464,7 @@ fn run_service_setup_elevated() -> anyhow::Result<u32> {
     anyhow::ensure!(svc.is_file(), "не найден {}: он должен лежать рядом с csqtt.exe", svc.display());
     let verb = webview::wide("runas");
     let file = webview::wide(&svc.to_string_lossy());
-    let params = webview::wide("setup");
+    let params = webview::wide(action);
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS,
@@ -463,7 +476,7 @@ fn run_service_setup_elevated() -> anyhow::Result<u32> {
     };
     // SAFETY: `info` and the strings it points to live for the whole call.
     if unsafe { ShellExecuteExW(&mut info) }.is_err() {
-        anyhow::bail!("установка отменена или нет прав администратора");
+        anyhow::bail!("действие отменено или нет прав администратора");
     }
     anyhow::ensure!(!info.hProcess.is_invalid(), "не удалось запустить csqtt-svc.exe");
     let mut code = 1u32;

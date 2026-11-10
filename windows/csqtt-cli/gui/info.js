@@ -32,9 +32,9 @@
       "Active Workers: " + (st.active_workers || 0),
       "Active Profile: " + (settings.active_profile !== undefined ? settings.active_profile : 0),
       "Link Mode: " + (prof.csqtt_link_mode ? "true" : "false"),
-      "Auth Mode: " + (prof.vk_auth_mode || "calls"),
+      "Auth Mode: " + (prof.vk_auth_mode || "vkcalls"),
       "Hash Mode: " + (prof.vk_hash_mode || "manual"),
-      "SRTP Mode: " + (prof.srtp_mode || "wrap"),
+      "SRTP Mode: " + (prof.srtp_mode || "auto"),
       "Transport: " + (prof.turn_transport || "udp"),
       "Generated At: " + new Date().toISOString()
     ];
@@ -390,6 +390,29 @@
     var updateSubtitleSpan = updateTile.querySelector(".body-small");
     currentUpdateSubtitleSpan = updateSubtitleSpan;
     actionsList.appendChild(updateTile);
+
+    // Portable install: stops the service (tunnel, routes and DNS are removed) and deletes it.
+    var uninstallTile = createActionTile({
+      title: "Удалить службу",
+      subtitle: "Остановить и удалить службу csqtt-win (нужны права администратора)",
+      icon: "Close",
+      onClick: function () {
+        window.UI.confirm({
+          title: "Удалить службу?",
+          message: "VPN отключится, служба csqtt-win будет остановлена и удалена. Файлы программы и настройки останутся.",
+          confirmText: "Удалить",
+          cancelText: "Отмена"
+        }).then(function (ok) {
+          if (!ok) return;
+          window.UI.toast("Удаление службы…");
+          window.csqtt.uninstallService().then(
+            function () { window.UI.toast("Служба удалена. Теперь можно удалить папку программы."); },
+            function (err) { window.UI.toast((err && err.message) || String(err)); }
+          );
+        });
+      }
+    });
+    actionsList.appendChild(uninstallTile);
 
     actionsCard.appendChild(actionsList);
     container.appendChild(actionsCard);

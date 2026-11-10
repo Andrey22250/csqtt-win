@@ -34,6 +34,8 @@
 //   csqtt.setupService()          -> Promise<void>  installs (if needed) and starts the service:
 //                                    runs `csqtt-svc.exe setup` elevated (UAC prompt). Rejects with
 //                                    Error(message) when the user declines UAC or setup fails.
+//   csqtt.uninstallService()      -> Promise<void>  stops and removes the service (UAC prompt):
+//                                    `csqtt-svc.exe uninstall` + `cleanup`. The app files stay.
 //   csqtt.openUrl(url)            -> Promise<void>  http/https only, opens the default browser
 //   csqtt.runSelf(args, {env, onOutput}) -> {proc: Promise<number>, done: Promise<{code}>,
 //                                    input(text), kill()}   starts `csqtt <args>` hidden.
@@ -218,6 +220,9 @@
     },
     setupService: function () {
       return call("service_setup").then(function () {});
+    },
+    uninstallService: function () {
+      return call("service_uninstall").then(function () {});
     },
     openUrl: function (url) {
       return call("open_url", { url: url });

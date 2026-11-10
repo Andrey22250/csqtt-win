@@ -167,7 +167,8 @@ pub fn build_service_info(executable_path: PathBuf) -> ServiceInfo {
         name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(SERVICE_DISPLAY_NAME),
         service_type: ServiceType::OWN_PROCESS,
-        start_type: ServiceStartType::AutoStart,
+        // Started by the app (window/tray) and stopped when it exits, not at boot.
+        start_type: ServiceStartType::OnDemand,
         error_control: ServiceErrorControl::Normal,
         executable_path,
         launch_arguments: vec![OsString::from("service")],
@@ -223,6 +224,22 @@ pub fn install() -> anyhow::Result<()> {
     let failure_actions = build_failure_actions();
     let _ = service.update_failure_actions(failure_actions);
 
+    grant_user_control()
+}
+
+/// Security descriptor of the service: the Windows default plus start/stop (RP, WP) for
+/// interactive users (IU), so the window and the tray start and stop the service without a
+/// UAC prompt. Everything else stays admin-only.
+pub const SERVICE_SDDL: &str = "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)";
+
+/// Applies `SERVICE_SDDL` to the installed service (`sc.exe sdset`, needs admin).
+fn grant_user_control() -> anyhow::Result<()> {
+    let status = std::process::Command::new("sc.exe")
+        .args(["sdset", SERVICE_NAME, SERVICE_SDDL])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .context("failed to run sc.exe sdset")?;
+    anyhow::ensure!(status.success(), "sc.exe sdset failed: {status}");
     Ok(())
 }
 
@@ -241,6 +258,7 @@ pub fn setup() -> anyhow::Result<()> {
             service
                 .change_config(&build_service_info(exe_path))
                 .context("failed to update service configuration")?;
+            grant_user_control()?;
             service
         }
         Err(windows_service::Error::Winapi(e))
@@ -343,7 +361,7 @@ mod tests {
         assert_eq!(info.name, OsString::from(SERVICE_NAME));
         assert_eq!(info.display_name, OsString::from(SERVICE_DISPLAY_NAME));
         assert_eq!(info.service_type, ServiceType::OWN_PROCESS);
-        assert_eq!(info.start_type, ServiceStartType::AutoStart);
+        assert_eq!(info.start_type, ServiceStartType::OnDemand);
         assert_eq!(info.error_control, ServiceErrorControl::Normal);
         assert_eq!(info.executable_path, path);
         assert_eq!(info.launch_arguments, vec![OsString::from("service")]);

@@ -199,6 +199,11 @@
         return;
       }
 
+      if (method === "service_uninstall") {
+        setTimeout(function () { resolve(null); }, 1000);
+        return;
+      }
+
       if (method === "service_setup") {
         setTimeout(function () { resolve(null); }, 1500);
         return;

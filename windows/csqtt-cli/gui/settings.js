@@ -704,7 +704,7 @@
         window.csqtt.exportJson(true).then(function (rawJson) {
           try {
             var data = typeof rawJson === "string" ? JSON.parse(rawJson) : rawJson;
-            var token = (data.secrets && data.secrets.vk_access_token) || data.vk_access_token || "";
+            var token = (data.deploy && data.deploy.vk_access_token) || "";
             if (token && navigator.clipboard && navigator.clipboard.writeText) {
               navigator.clipboard.writeText(token);
               window.UI.toast("Бессрочный VK токен скопирован");
@@ -1016,7 +1016,7 @@
                 captcha_wbv_solve_method: "auto",
                 vk_hash_mode: "manual",
                 vk_access_token_user_id: "",
-                selected_fingerprint: "chrome",
+                selected_fingerprint: "firefox",
                 active_client_ids: "8202606,6287487",
                 vk_hash_check_results: "{}",
                 csqtt_link: "",
@@ -1722,7 +1722,7 @@
         var hashMode = p.vk_hash_mode || "manual";
         hashModeDropdown.setSelectedKey(hashMode);
 
-        var hasVkToken = !!(p.vk_access_token_user_id || (p.vk_hashes && p.vk_hashes.indexOf("token_") !== -1));
+        var hasVkToken = !!p.vk_access_token_user_id;
 
         if (hashMode === "manual") {
           openHashesBtn.style.display = "flex";

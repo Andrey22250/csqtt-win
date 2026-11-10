@@ -541,7 +541,7 @@
       // Fingerprint
       var fingerprintDropdown = window.UI.dropdown({
         title: "Отпечаток",
-        selectedKey: (prof && prof.selected_fingerprint) || "chrome",
+        selectedKey: (prof && prof.selected_fingerprint) || "firefox",
         options: [
           { key: "chrome", label: "Chrome" },
           { key: "safari", label: "Safari" },

@@ -667,7 +667,19 @@ pub(crate) async fn solve_captcha_task(
 
 /// Runs the tray message loop until "Exit" is chosen. Blocking.
 #[allow(dead_code)]
+/// Runs the tray icon: one per session; starts the service and, on exit, stops it unless the
+/// window is still open (see svc_control).
 pub fn run_tray() -> anyhow::Result<()> {
+    let Some(_instance) = crate::gui::NamedClaim::claim(crate::svc_control::TRAY_MUTEX) else {
+        return Ok(());
+    };
+    std::thread::spawn(crate::svc_control::start_service);
+    let result = run_tray_inner();
+    crate::svc_control::stop_if_last(crate::svc_control::GUI_MUTEX);
+    result
+}
+
+fn run_tray_inner() -> anyhow::Result<()> {
     let (tx_cmd, mut rx_cmd) = tokio::sync::mpsc::unbounded_channel::<TrayCommand>();
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 

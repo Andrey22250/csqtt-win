@@ -152,7 +152,7 @@
     var importTextarea = window.UI.h("textarea", {
       className: "m3-field-input",
       attrs: {
-        placeholder: "Вставьте JSON или csqtt://connect?host=...",
+        placeholder: "Вставьте JSON или ссылку csqtt://…",
         spellcheck: "false"
       },
       style: {
@@ -407,7 +407,7 @@
             stepDesc.textContent = lastLine;
             if (lastLine.indexOf("Получение токена") !== -1) {
               statusTitle.textContent = "Получение токена VK…";
-            } else if (lastLine.indexOf("Повторная попытка") !== -1) {
+            } else if (lastLine.indexOf("Повторная авторизация") !== -1) {
               statusTitle.textContent = "Повторная попытка авторизации…";
             }
           }
