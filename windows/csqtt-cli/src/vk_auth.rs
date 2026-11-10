@@ -13,7 +13,6 @@ pub const VK_CLIENT_ID: &str = "7793118";
 pub const VK_OAUTH_SCOPE: i32 = 1073737727;
 pub const VK_OAUTH_REDIRECT_URI: &str = "https://oauth.vk.ru/blank.html";
 pub const VK_LOGIN_URL: &str = "https://vk.ru/";
-pub const VK_USER_AGENT: &str = "Mozilla/5.0 (Linux; Android 13; Mobile)";
 
 /// OAuth authorization URL for user consent / fallback / repeat authorization.
 pub const VK_OAUTH_AUTH_URL: &str = concat!(
@@ -409,7 +408,11 @@ pub fn login(on_step: &mut dyn FnMut(&str)) -> Result<VkAuthPayload, String> {
         width: 480,
         height: 720,
         visible: true,
-        user_agent: Some(VK_USER_AGENT.to_string()),
+        // The WebView's own user agent. Android uses its real WebView UA here; the short
+        // "Android 13; Mobile" string is only its fallback for a background request. Set on
+        // the window it contradicted the Client Hints (Edge on Windows) and VK's anti-fraud
+        // refused password logins with "слишком много попыток" on any account.
+        user_agent: None,
         init_scripts: Vec::new(),
         intercept_filters: Vec::new(),
         profile: "vk".to_string(),
