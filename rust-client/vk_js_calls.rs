@@ -72,7 +72,10 @@ pub async fn start(
         .timeout(Duration::from_secs(15))
         .connect_timeout(Duration::from_secs(8))
         .redirect(primp::redirect::Policy::limited(5))
-        .dns_resolver(crate::dns::global())
+        .dns_resolver(crate::dns::global());
+    #[cfg(windows)]
+    let client = client.local_address(crate::platform_windows::bypass_local_ip());
+    let client = client
         .build()
         .context("инициализация браузерного HTTP-клиента")?;
     let access_token = bootstrap.token;

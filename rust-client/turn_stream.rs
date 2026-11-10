@@ -9,6 +9,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, OnceLock},
 };
+#[cfg_attr(windows, allow(unused_imports))]
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -57,7 +58,11 @@ pub async fn connect(
     TurnStreamReader,
     TurnStreamWriteFailure,
 )> {
-    let socket = timeout(STREAM_CONNECT_TIMEOUT, TcpStream::connect(server))
+    #[cfg(not(windows))]
+    let connect = TcpStream::connect(server);
+    #[cfg(windows)]
+    let connect = crate::platform_windows::connect_tcp(server);
+    let socket = timeout(STREAM_CONNECT_TIMEOUT, connect)
         .await
         .context("TURN TCP connect timed out")?
         .with_context(|| format!("TURN {} connect {server}", endpoint.transport.as_str()))?;

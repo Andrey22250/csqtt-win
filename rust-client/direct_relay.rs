@@ -212,6 +212,33 @@ fn is_local_or_private_ip(ip: &IpAddr) -> bool {
     }
 }
 
+fn app_rules_active() -> bool {
+    #[cfg(windows)]
+    {
+        crate::app_exclude_windows::excluder().is_some()
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+fn app_excluded(protocol: u8, src_addr: SocketAddr) -> bool {
+    #[cfg(windows)]
+    {
+        if let Some(excluder) = crate::app_exclude_windows::excluder() {
+            excluder.is_excluded(protocol, src_addr)
+        } else {
+            false
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (protocol, src_addr);
+        false
+    }
+}
+
 pub struct DirectRelay {
     domain_routing: Arc<ArcSwap<crate::dispatcher::DomainRoutingConfig>>,
     direct_ips: Arc<ArcSwap<std::collections::HashSet<IpAddr>>>,
@@ -368,9 +395,13 @@ impl DirectRelay {
                     let active_tcp_conn = active_tcp_c.clone();
 
                     tokio::spawn(async move {
+                        #[cfg(not(windows))]
+                        let connect = tokio::net::TcpStream::connect(remote_addr);
+                        #[cfg(windows)]
+                        let connect = crate::platform_windows::connect_tcp(remote_addr);
                         let connect_res = tokio::time::timeout(
                             Duration::from_secs(5),
-                            tokio::net::TcpStream::connect(remote_addr),
+                            connect,
                         )
                         .await;
 
@@ -524,7 +555,7 @@ impl DirectRelay {
 
     pub async fn try_handle(&self, packet: &PacketBuf) -> bool {
         let config = self.domain_routing.load();
-        if !config.enabled && !config.ip_routing_enabled {
+        if !config.enabled && !config.ip_routing_enabled && !app_rules_active() {
             return false;
         }
         let slice = packet.as_slice();
@@ -677,7 +708,7 @@ impl DirectRelay {
             &config.ip_rules,
         );
 
-        let is_candidate_direct = if self.is_direct_ip(&dst_ip) {
+        let is_candidate_direct = (if self.is_direct_ip(&dst_ip) {
             if config.ip_routing_enabled && config.ip_is_whitelist && !config.ip_rules.is_empty() {
                 !config.ip_rules.iter().any(|r| r.matches(&dst_ip))
             } else {
@@ -685,7 +716,7 @@ impl DirectRelay {
             }
         } else {
             matches!(verdict, crate::sni::RouteVerdict::Direct)
-        };
+        }) || app_excluded(protocol, src_addr);
 
         if protocol == 17 {
             if !is_candidate_direct {
@@ -752,6 +783,8 @@ impl DirectRelay {
             let Ok(new_sock) = tokio::net::UdpSocket::bind(bind_addr).await else {
                 return false;
             };
+            #[cfg(windows)]
+            let _ = crate::platform_windows::prepare_udp(&new_sock, dst_addr.is_ipv6());
             let socket_ref = socket2::SockRef::from(&new_sock);
             let _ = socket_ref.set_recv_buffer_size(262144);
             let _ = socket_ref.set_send_buffer_size(262144);
@@ -885,6 +918,8 @@ impl DirectRelay {
                 Ok(s) => s,
                 Err(_) => return,
             };
+            #[cfg(windows)]
+            let _ = crate::platform_windows::prepare_udp(&socket, false);
             let upstreams = [
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(77, 88, 8, 8)), 53),
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(77, 88, 8, 1)), 53),

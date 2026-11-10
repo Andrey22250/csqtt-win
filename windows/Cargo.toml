@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = ["csqtt-logic", "csqtt-ipc", "csqtt-svc", "csqtt-cli", "csqtt-deploy"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.97"
+license-file = "../LICENSE"
