@@ -67,6 +67,11 @@ impl LogBook {
     }
 
     /// Clears all entries from the logbook.
+    /// Drops entries hidden when active logging is off (errors, ready and stats stay).
+    pub fn retain_inactive_allowed(&mut self) {
+        self.logs.retain(|e| TunnelLogPolicy::is_allowed_when_inactive_logging(&e.key, e.is_error, e.level));
+    }
+
     pub fn clear(&mut self) {
         self.logs.clear();
     }

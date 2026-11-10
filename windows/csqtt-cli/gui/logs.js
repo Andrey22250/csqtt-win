@@ -207,7 +207,7 @@
       onCheckedChange: function (checked) {
         window.App.saveSettings(function (s) {
           s.logging_enabled = checked;
-        });
+        }).then(function () { return window.csqtt.logBook(); }).then(setBook).catch(function () {});
       }
     });
     headerCard.appendChild(logSwitch);

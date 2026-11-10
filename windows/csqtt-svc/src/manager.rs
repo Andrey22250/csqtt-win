@@ -9,7 +9,8 @@
 //!   CSQTT_BYPASS_LOCAL_IP), so a change of the physical interface restarts the core;
 //! - routes 0/1 + 128/1 (+ IPv6 halves) and an NRPT rule are kept across core restarts
 //!   (kill-switch, like Android keeps its VPN interface) and removed on stop.
-
+
+use csqtt_logic::tunnel_log_policy::LogLevel;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -80,7 +81,12 @@ pub enum Status {
 #[derive(Debug, Clone)]
 pub enum ManagerEvent {
     Status(Status),
+    /// A message of the service itself.
     Log(String),
+    /// A raw line of the core: kept in the raw log, shown only when the log book knows it.
+    CoreLine(String),
+    /// A keyed entry of the live log view (core events: ready, DTLS, ...).
+    Keyed(csqtt_logic::log_book::LogUpdate),
     Stats { active: i32, bytes_up: i64, bytes_down: i64 },
     /// The core needs a captcha solved; answer with `Request::CaptchaResult`.
     CaptchaRequest { mode: String, redirect_uri: String, session_token: String },
@@ -298,6 +304,11 @@ impl Manager {
             auto_calls: VkAutoCalls::new(),
             auto_hashes: None,
         }
+    }
+
+    fn keyed(&self, key: &str, message: String, priority: i32, is_error: bool, level: Option<LogLevel>) {
+        let update = csqtt_logic::log_book::LogUpdate { key: key.to_string(), message, priority, is_error, level };
+        let _ = self.events.send(ManagerEvent::Keyed(update));
     }
 
     fn log(&self, message: impl Into<String>) {
@@ -720,7 +731,7 @@ impl Manager {
             return self.fail(&reason).await;
         }
         if !csqtt_logic::tunnel_log_policy::is_internal_recovery(line) {
-            self.log(line.to_string());
+            let _ = self.events.send(ManagerEvent::CoreLine(line.to_string()));
         }
     }
 
@@ -788,9 +799,25 @@ impl Manager {
                 self.on_network_change();
             }
             Event::CallUnavailable { hash, code } => self.on_call_unavailable(&hash, code).await,
-            Event::Process { pid } => self.log(format!("[КЛИЕНТ] PID ядра: {pid}")),
-            Event::Ready { worker, .. } => self.log(format!("[ВОРКЕР #{worker}] Поток готов ✓")),
-            Event::Dtls { worker, message } => self.log(format!("[DTLS #{worker}] {message}")),
+            Event::Process { .. } => {}
+            Event::Ready { .. } => self.keyed("ready", "[ВОРКЕР] Поток готов ✓".into(), 20, false, Some(LogLevel::Ok)),
+            Event::Dtls { worker, message } => {
+                // TunnelManager.handleTunnelEvent (Dtls)
+                let suffix = message.trim();
+                let is_error = suffix.contains("не состоялось") || suffix.to_lowercase().contains("ошибка");
+                if is_error {
+                    self.keyed(&format!("dtls_err_{worker}"), format!("[DTLS] Поток {worker}: {suffix}"), 30, true, Some(LogLevel::Err));
+                } else {
+                    let text = if suffix.contains("завершено") {
+                        "[DTLS] Рукопожатие завершено, ключи SRTP установлены ✓".to_string()
+                    } else if !suffix.is_empty() {
+                        format!("[DTLS] {suffix}")
+                    } else {
+                        "[DTLS] Рукопожатие выполняется".to_string()
+                    };
+                    self.keyed("dtls_status", text, 30, false, Some(LogLevel::Ok));
+                }
+            }
             Event::Workers { workers } => self.log(format!("[СЕРВЕР] Назначено воркеров: {workers}")),
             Event::Routing { .. } => self.log("[СЕРВЕР] Получены правила маршрутизации"),
             Event::Progress { .. } | Event::Started { .. } | Event::Stopped { .. } | Event::CaptchaDone { .. } => {}

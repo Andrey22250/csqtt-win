@@ -11,6 +11,7 @@ use csqtt_ipc::{
     LogBookEntry, Request, Response, StatusInfo, TunnelState, PROTOCOL_VERSION,
 };
 use csqtt_logic::log_book::{CoreLineClassifier, LogBook};
+use csqtt_logic::tunnel_log_policy::LogLevel;
 use csqtt_logic::settings::{export_config_json, SecretKey, Settings};
 
 use crate::manager::{ManagerEvent, ManagerHandle, Request as MgrRequest, Status as MgrStatus};
@@ -96,12 +97,13 @@ pub fn apply_status(info: &mut StatusInfo, status: &MgrStatus) {
 /// Feeds one log line into the keyed log book (Android TunnelManager logic). Lines the
 /// classifier does not know (service messages, plain core output) get their own entry keyed
 /// by the text, so an identical repeat bumps its counter instead of appending.
-pub fn book_add_line(state: &mut ServerState, line: &str) -> bool {
+pub fn book_add_line(state: &mut ServerState, line: &str, keep_unknown: bool) -> bool {
     let updates = state.classifier.classify(line);
     let enabled = state.logging_enabled;
     if updates.is_empty() {
         let text = line.trim();
-        if text.is_empty() {
+        // Android hides core lines it has no rule for; service messages stay.
+        if text.is_empty() || !keep_unknown {
             return false;
         }
         let lower = text.to_lowercase();
@@ -184,14 +186,34 @@ pub async fn serve(
                                 guard.classifier.set_active_workers(u32::try_from(active).unwrap_or(0));
                                 guard.status.bytes_up = bytes_up;
                                 guard.status.bytes_down = bytes_down;
+                                // TunnelManager.handleTunnelEvent (Stats)
+                                let mb = (bytes_up + bytes_down) as f64 / (1024.0 * 1024.0);
+                                let msg = format!("[СЕТЬ] Активных: {active} | Трафик: {}", format!("{mb:.2} МБ").replace('.', ","));
+                                let enabled = guard.logging_enabled;
+                                let book_changed = guard.book.update("stats", &msg, 25, false, Some(LogLevel::Net), enabled);
+                                let book = book_changed.then(|| book_entries(&guard.book));
                                 let current = guard.status.clone();
                                 drop(guard);
                                 let _ = event_tx.send(ServerBroadcastEvent::Status(current));
+                                if let Some(entries) = book {
+                                    let _ = event_tx.send(ServerBroadcastEvent::LogBook(entries));
+                                }
                             }
-                            Ok(ManagerEvent::Log(line)) => {
+                            Ok(ManagerEvent::Keyed(update)) => {
+                                let mut guard = state.lock().await;
+                                push_log_line(&mut guard.logs, update.message.clone());
+                                let enabled = guard.logging_enabled;
+                                let entries = guard.book.update_from(&update, enabled).then(|| book_entries(&guard.book));
+                                drop(guard);
+                                if let Some(entries) = entries {
+                                    let _ = event_tx.send(ServerBroadcastEvent::LogBook(entries));
+                                }
+                            }
+                            Ok(ref event @ (ManagerEvent::CoreLine(_) | ManagerEvent::Log(_))) => {
+                                let (core, line) = match event { ManagerEvent::CoreLine(l) => (true, l.clone()), ManagerEvent::Log(l) => (false, l.clone()), _ => unreachable!() };
                                 let mut guard = state.lock().await;
                                 push_log_line(&mut guard.logs, line.clone());
-                                let changed = book_add_line(&mut guard, &line);
+                                let changed = book_add_line(&mut guard, &line, !core);
                                 let entries = changed.then(|| book_entries(&guard.book));
                                 drop(guard);
                                 let _ = event_tx.send(ServerBroadcastEvent::Log(line));
@@ -534,7 +556,7 @@ async fn handle_one_shot(
         Request::SetSettings { settings } => {
             match serde_json::from_value::<Settings>(settings) {
                 Ok(val) => {
-                    state.lock().await.logging_enabled = val.logging_enabled;
+                    { let mut g = state.lock().await; g.logging_enabled = val.logging_enabled; if !val.logging_enabled { g.book.retain_inactive_allowed(); } }
                     if let Err(e) = settings_file::save_json(paths::settings_path(), &val) {
                         Response::Error {
                             message: format!("не удалось сохранить настройки: {e}"),

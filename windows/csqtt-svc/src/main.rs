@@ -126,7 +126,8 @@ async fn run(params: Option<CoreParams>) -> anyhow::Result<()> {
     let printer = tokio::spawn(async move {
         loop {
             match events.recv().await {
-                Ok(ManagerEvent::Log(line)) => println!("{line}"),
+                Ok(ManagerEvent::Log(line)) | Ok(ManagerEvent::CoreLine(line)) => println!("{line}"),
+                Ok(ManagerEvent::Keyed(u)) => println!("{}", u.message),
                 Ok(ManagerEvent::Status(status)) => {
                     println!("== статус: {status:?}");
                     if matches!(status, Status::Failed { .. }) {

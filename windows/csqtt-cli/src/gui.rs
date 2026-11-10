@@ -129,7 +129,7 @@ pub fn run_gui() -> anyhow::Result<()> {
     let dir = prepare_assets()?;
     let url = file_url(&dir.join("index.html"));
     // The service lives while the app is open: start it now (no UAC, see svc_control).
-    std::thread::spawn(crate::svc_control::start_service);
+    crate::svc_control::start_service();
 
     let (call_tx, call_rx) = tokio::sync::mpsc::unbounded_channel::<HostCall>();
     let (out_tx, out_rx) = std_mpsc::channel::<String>();
@@ -347,7 +347,7 @@ fn worker_main(mut calls: tokio::sync::mpsc::UnboundedReceiver<HostCall>, out: O
 /// Keeps one subscribed connection to the service and turns its stream into page events.
 async fn subscription_loop(out: Out) {
     loop {
-        if let Ok(mut client) = Client::connect().await {
+        if let Ok(mut client) = connect_service().await {
             if client.send(&Request::Subscribe).await.is_ok() {
                 emit(&out, "service", json!({ "running": true }));
                 let (token_tx, mut token_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -496,6 +496,22 @@ fn run_svc_elevated(action: &str) -> anyhow::Result<u32> {
 
 /// One request to the service on a fresh connection. `logs` (without follow) collects the
 /// tail into `{type: "logs", lines: [...]}`; everything else returns the single response.
+/// Connects to the service pipe. Right after the window starts the service it needs a few
+/// seconds before the pipe listens: wait for it (up to 15 s) instead of failing at once.
+async fn connect_service() -> anyhow::Result<Client> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        if let Ok(client) = Client::connect().await {
+            return Ok(client);
+        }
+        let starting = tokio::task::spawn_blocking(crate::svc_control::starting_or_running).await.unwrap_or(false);
+        if !starting || std::time::Instant::now() >= deadline {
+            anyhow::bail!("Служба csqtt-win не запущена");
+        }
+        tokio::time::sleep(Duration::from_millis(400)).await;
+    }
+}
+
 async fn ipc_call(request: Value) -> anyhow::Result<Value> {
     let request: Request = serde_json::from_value(request).context("неверный запрос")?;
     let is_logs = match &request {
@@ -505,7 +521,7 @@ async fn ipc_call(request: Value) -> anyhow::Result<Value> {
         Request::Logs { .. } => true,
         _ => false,
     };
-    let mut client = Client::connect().await.map_err(|_| anyhow::anyhow!("Служба csqtt-win не запущена"))?;
+    let mut client = connect_service().await?;
     client.send(&request).await?;
     if is_logs {
         let mut lines: Vec<String> = Vec::new();

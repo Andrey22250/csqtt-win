@@ -90,13 +90,13 @@ impl FileLog {
         tokio::spawn(async move {
             loop {
                 match events.recv().await {
-                    Ok(crate::manager::ManagerEvent::Log(line)) => {
+                    Ok(crate::manager::ManagerEvent::Log(line)) | Ok(crate::manager::ManagerEvent::CoreLine(line)) => {
                         logger.write_line(&line);
                     }
                     Ok(crate::manager::ManagerEvent::Status(status)) => {
                         logger.write_line(&format!("== статус: {status:?}"));
                     }
-                    Ok(crate::manager::ManagerEvent::Stats { .. }) => {
+                    Ok(crate::manager::ManagerEvent::Stats { .. }) | Ok(crate::manager::ManagerEvent::Keyed(_)) => {
                         // Ignored by design
                     }
                     Ok(crate::manager::ManagerEvent::CaptchaRequest { redirect_uri, .. }) => {

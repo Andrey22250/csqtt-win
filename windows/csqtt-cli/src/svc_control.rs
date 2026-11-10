@@ -43,3 +43,23 @@ pub(crate) fn stop_if_last(other_mutex: &str) {
         stop_service();
     }
 }
+
+/// True while the service is starting or running (sc query STATE 2 = START_PENDING,
+/// 4 = RUNNING): the pipe may not be listening yet, so callers should wait for it.
+pub(crate) fn starting_or_running() -> bool {
+    let Ok(out) = Command::new("sc.exe")
+        .args(["query", SERVICE_NAME])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.lines()
+        .find(|l| l.contains("STATE"))
+        .and_then(|l| l.split(':').nth(1))
+        .and_then(|v| v.split_whitespace().next())
+        .is_some_and(|code| code == "2" || code == "4")
+}
