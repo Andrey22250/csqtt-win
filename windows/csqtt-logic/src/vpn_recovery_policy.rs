@@ -53,7 +53,7 @@ impl VpnRecoveryPolicy {
     pub fn message(kind: VpnFailureKind, detail: &str) -> String {
         match kind {
             VpnFailureKind::ServiceDestroyed => {
-                format!("VPN-служба Android была пересоздана: {detail}")
+                format!("VPN-служба была перезапущена: {detail}")
             }
             VpnFailureKind::TunFdDeliveryFailed => {
                 format!("Rust-клиент не принял TUN-интерфейс: {detail}")
@@ -62,7 +62,7 @@ impl VpnRecoveryPolicy {
                 format!("Не удалось создать VPN-интерфейс: {detail}")
             }
             VpnFailureKind::PermissionRevoked => {
-                format!("Разрешение Android VPN отозвано: {detail}")
+                format!("Доступ к VPN-адаптеру потерян: {detail}")
             }
         }
     }

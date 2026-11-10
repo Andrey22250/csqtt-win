@@ -6,7 +6,7 @@
 
 ## 1. Что это
 
-**csqtt-win** переносит функциональность Android-клиента csqtt на платформу Windows. Программа состоит из трёх основных компонентов:
+**csqtt-win** — клиент csqtt для Windows. Программа состоит из трёх основных компонентов:
 
 - **Ядро (`client.exe`)**: скомпилированное ядро `rust-client` с патчами под Windows. Работает через виртуальный сетевой драйвер Wintun, изолирует собственные сетевые сокеты от туннеля (`IP_UNICAST_IF`) и контролируется родительским процессом.
 - **Системная служба (`csqtt-svc.exe`)**: фоновая служба Windows (запускается от учетной записи `NT AUTHORITY\SYSTEM`). Управляет сетевым адаптером Wintun, IP-адресами, маршрутизацией (маршруты `0.0.0.0/1` и `128.0.0.0/1`), политиками DNS (NRPT для защиты от утечек), аварийным восстановлением сети после сбоев и хранилищем секретов.
@@ -57,7 +57,7 @@
    ```cmd
    csqtt import csqtt://...
    ```
-   Либо из JSON-файла экспорта (полученного из Android-версии csqtt):
+   Либо из JSON-файла экспорта csqtt:
    ```cmd
    csqtt import config.json
    ```
@@ -98,7 +98,7 @@
 | `status` | Показать состояние туннеля (статус, IP, DNS, число воркеров, переданный трафик) | `csqtt status` |
 | `logs [-f] [-n <число>]` | Просмотр журнала событий. `-n` задаёт число строк (по умолчанию 100), `-f` (`--follow`) включает непрерывный вывод | `csqtt logs -f`<br>`csqtt logs -n 50` |
 | `import <ссылка\|файл>` | Импортировать конфигурацию из ссылки `csqtt://` или файла JSON | `csqtt import csqtt://ey...`<br>`csqtt import backup.json` |
-| `export [--secrets] [файл]` | Экспортировать конфигурацию в формате JSON (совместимом с Android). Опция `--secrets` (`-s`) включает защищённые пароли/токены. При указании файла выводит в него, иначе — в stdout | `csqtt export out.json`<br>`csqtt export -s` |
+| `export [--secrets] [файл]` | Экспортировать конфигурацию в формате JSON (совместим с другими клиентами csqtt). Опция `--secrets` (`-s`) включает защищённые пароли/токены. При указании файла выводит в него, иначе — в stdout | `csqtt export out.json`<br>`csqtt export -s` |
 | `settings get [ключ]` | Получить все настройки в формате JSON или значение отдельного ключа | `csqtt settings get`<br>`csqtt settings get peer` |
 | `settings set <ключ> <значение>` | Записать значение параметра конфигурации (строка или JSON-значение) | `csqtt settings set workers_per_hash 18`<br>`csqtt settings set excluded_apps "game.exe"` |
 | `secret set <ключ> <значение>` | Записать защищённый секрет в хранилище DPAPI | `csqtt secret set connection_password_encrypted "pass123"` |
@@ -163,7 +163,7 @@ csqtt settings get excluded_apps
 
 ## 9. Деплой сервера
 
-Установка сервера csqtt на VPS по SSH (как вкладка «Деплой» в Android):
+Установка сервера csqtt на VPS по SSH (то же делает вкладка «Деплой» в окне):
 
 ```
 csqtt deploy --host <IP> [--port 22] [--user root] [--key <файл ключа>] [--sudo] [--docker]

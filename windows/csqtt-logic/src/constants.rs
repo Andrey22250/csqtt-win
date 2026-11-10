@@ -106,17 +106,6 @@ pub mod update {
         "https://github.com/amurcanov/csqtt/tree/";
 }
 
-/// Notification channels and ids.
-pub mod notifications {
-    pub const TUNNEL_CHANNEL_ID: &str = "csqtt_tunnel_v4";
-    pub const TUNNEL_NOTIFICATION_ID: i32 = 1;
-
-    pub const VPN_CHANNEL_ID: &str = "csqtt_vpn_v1";
-
-    pub const CAPTCHA_CHANNEL_ID: &str = "captcha_channel";
-    pub const CAPTCHA_NOTIFICATION_ID: i32 = 9001;
-}
-
 /// Widget intent actions.
 pub mod widget {
     pub const ACTION_TOGGLE: &str = "com.csqtt.client.ACTION_WIDGET_TOGGLE";
@@ -127,15 +116,6 @@ pub mod captcha {
     pub const ERROR_SLIDER_DETECTED: &str = "slider_detected";
     pub const AUTO_VIEWPORT_WIDTHS: [i32; 7] = [356, 358, 360, 362, 364, 366, 368];
     pub const AUTO_VIEWPORT_HEIGHTS: [i32; 7] = [376, 378, 380, 382, 384, 386, 388];
-}
-
-/// Secure storage settings and keystore identifiers.
-pub mod secure_store {
-    pub const KEY_ALIAS: &str = "csqtt.settings.secrets";
-    pub const ANDROID_KEYSTORE: &str = "AndroidKeyStore";
-    pub const TRANSFORMATION: &str = "AES/GCM/NoPadding";
-    pub const GCM_TAG_BITS: i32 = 128;
-    pub const VERSION_PREFIX: &str = "v1:";
 }
 
 /// VK auto-hash authentication and API constants.
@@ -221,10 +201,8 @@ mod tests {
         assert_eq!(timeouts::UPDATE_RATE_LIMIT_COOLDOWN_MS, 1800000);
         assert_eq!(thresholds::FLOOD_CONTROL_THRESHOLD, 5);
         assert_eq!(update::DEFAULT_CHECK_INTERVAL_HOURS, 12);
-        assert_eq!(notifications::TUNNEL_NOTIFICATION_ID, 1);
         assert_eq!(captcha::AUTO_VIEWPORT_WIDTHS.len(), 7);
         assert_eq!(captcha::AUTO_VIEWPORT_HEIGHTS.len(), 7);
-        assert_eq!(secure_store::GCM_TAG_BITS, 128);
         assert_eq!(vk_auto_hash::VK_APP_ID, 7793118);
         assert_eq!(vpn::DEFAULT_MTU, 1500);
         assert_eq!(theme::MODE_SYSTEM, "system");
