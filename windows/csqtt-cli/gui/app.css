@@ -1376,3 +1376,31 @@ input, button, select, textarea {
 .log-count-badge {
   flex-shrink: 0;
 }
+
+/* Process picker rows in showProcessPicker */
+.proc-picker-row {
+  /* Override .m3-button defaults that collapse rows in flex columns */
+  flex-shrink: 0 !important;
+  height: auto !important;
+  min-height: 44px;
+  padding: 6px 10px !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  /* Prevent overflow:hidden from clipping wrapped text */
+  overflow: visible !important;
+  white-space: normal;
+  width: 100%;
+}
+
+.proc-picker-name {
+  display: block;
+  word-break: break-word;
+}
+
+.proc-picker-path {
+  display: block;
+  word-break: break-all;
+  white-space: normal;
+}

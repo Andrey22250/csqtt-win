@@ -1123,6 +1123,7 @@ mod tests {
             active_workers: 18,
             bytes_up: 10 * 1024 * 1024,
             bytes_down: 25 * 1024 * 1024,
+            connected_since_ms: None,
         };
         let text = format_status(&status);
         assert!(text.contains("Подключен"));
@@ -1143,6 +1144,7 @@ mod tests {
             active_workers: 0,
             bytes_up: 0,
             bytes_down: 0,
+            connected_since_ms: None,
         };
         let text = format_status(&status);
         assert!(text.contains("Ошибка (Неверный пароль)"));

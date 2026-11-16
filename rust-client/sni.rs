@@ -305,6 +305,21 @@ pub fn is_domain_in_list(sni: &str, direct_domains: &[String]) -> bool {
     false
 }
 
+/// Windows rules prefixed with `!` always use the tunnel, including subdomains.
+#[cfg(windows)]
+pub(crate) fn is_vpn_exception(sni: &str, direct_domains: &[String]) -> bool {
+    let host = sni.trim_end_matches('.').as_bytes();
+    direct_domains.iter().any(|rule| {
+        let Some(domain) = rule.trim().strip_prefix('!') else { return false };
+        let domain = domain.trim().trim_end_matches('.').as_bytes();
+        !domain.is_empty()
+            && (host.eq_ignore_ascii_case(domain)
+                || (host.len() > domain.len()
+                    && host[host.len() - domain.len() - 1] == b'.'
+                    && host[host.len() - domain.len()..].eq_ignore_ascii_case(domain)))
+    })
+}
+
 pub fn is_direct_domain(
     sni: &str,
     exclude_ru_zones: bool,
@@ -312,6 +327,10 @@ pub fn is_direct_domain(
     direct_domains: &[String],
 ) -> bool {
     let sni_trimmed = sni.trim_end_matches('.');
+    #[cfg(windows)]
+    if is_vpn_exception(sni_trimmed, direct_domains) {
+        return false;
+    }
     if exclude_ru_zones && is_ru_zone(sni_trimmed) {
         return true;
     }
@@ -329,6 +348,10 @@ pub fn is_direct_domain_mode(
     direct_domains: &[String],
 ) -> bool {
     let sni_trimmed = sni.trim_end_matches('.');
+    #[cfg(windows)]
+    if is_vpn_exception(sni_trimmed, direct_domains) {
+        return false;
+    }
     if is_whitelist {
         !is_domain_in_list(sni_trimmed, direct_domains)
     } else {
@@ -433,6 +456,13 @@ pub fn evaluate_route(
     ip_rules: &[IpRule],
 ) -> RouteVerdict {
     if !domain_routing_enabled && !ip_routing_enabled {
+        return RouteVerdict::Tunnel;
+    }
+
+    #[cfg(windows)]
+    if domain_routing_enabled
+        && domain.is_some_and(|d| is_vpn_exception(d, direct_domains))
+    {
         return RouteVerdict::Tunnel;
     }
 
@@ -543,6 +573,12 @@ pub fn parse_direct_domains(input: &str) -> Vec<String> {
         if cleaned.is_empty() {
             continue;
         }
+        #[cfg(windows)]
+        let force_vpn = cleaned.starts_with('!');
+        #[cfg(windows)]
+        if force_vpn {
+            cleaned = &cleaned[1..];
+        }
         if let Some(pos) = cleaned.find("://") {
             cleaned = &cleaned[pos + 3..];
         }
@@ -558,10 +594,14 @@ pub fn parse_direct_domains(input: &str) -> Vec<String> {
         let cleaned_domain = cleaned
             .trim_matches(|c: char| c == '.' || c == ',' || c == ';' || c.is_whitespace())
             .to_lowercase();
-        if cleaned_domain.len() >= 3
-            && cleaned_domain.contains('.')
-            && !result.contains(&cleaned_domain)
-        {
+        if cleaned_domain.len() >= 3 && cleaned_domain.contains('.') {
+            #[cfg(windows)]
+            let cleaned_domain = if force_vpn {
+                format!("!{cleaned_domain}")
+            } else {
+                cleaned_domain
+            };
+            if result.contains(&cleaned_domain) { continue; }
             result.push(cleaned_domain);
         }
     }
@@ -747,6 +787,34 @@ pub fn extract_src_addr(packet: &[u8]) -> Option<SocketAddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn vpn_exceptions_override_zones_templates_and_ip_bypasses() {
+        let rules = parse_direct_domains("!example.ru,!yandex.ru,example.ru");
+        for host in ["example.ru", "x.example.ru", "X.example.ru.", "yandex.ru"] {
+            assert!(!is_direct_domain(host, true, true, &rules), "{host}");
+            assert!(!is_direct_domain_mode(host, true, true, true, &rules), "{host}");
+            assert!(matches!(evaluate_route(
+                &"203.0.113.10".parse().unwrap(), Some(host), true, false, true,
+                true, &rules, true, false, &[IpRule::Cidr("203.0.113.0".parse().unwrap(), 24)],
+            ), RouteVerdict::Tunnel));
+        }
+        assert!(is_direct_domain("ya.ru", true, false, &rules));
+        assert!(is_direct_domain("notexample.ru", true, false, &rules));
+        assert!(!is_vpn_exception("example.ru.example.com", &rules));
+        assert!(!is_vpn_exception("notexample.ru", &rules));
+        assert!(!is_vpn_exception("anything.ru", &["!".into()]));
+        assert!(is_direct_domain_mode("other.com", true, false, false, &rules));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn vpn_exceptions_survive_domain_normalization() {
+        assert_eq!(parse_direct_domains(
+            "!https://www.example.ru:443/panel !example.ru. ya.ru !www.yandex.ru; !"
+        ), vec!["!example.ru", "ya.ru", "!yandex.ru"]);
+    }
 
     #[test]
     fn test_ru_zone_detection() {

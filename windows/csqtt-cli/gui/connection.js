@@ -53,7 +53,7 @@
   function renderConnectionScreen(container) {
     container.innerHTML = "";
 
-    var uptimeSeconds = 0;
+    var connectedSinceMs = null;
     var uptimeTimer = null;
 
     // Hero Section Card: Connect Button & State
@@ -77,6 +77,11 @@
       text: "00:00:00"
     });
     heroCard.appendChild(uptimeText);
+
+    function refreshUptime() {
+      var seconds = connectedSinceMs === null ? 0 : Math.floor((Date.now() - connectedSinceMs) / 1000);
+      uptimeText.textContent = formatUptime(seconds);
+    }
 
     // Status statistics grid
     var statsGrid = window.UI.h("div", { className: "status-grid" });
@@ -126,18 +131,28 @@
       var isReconnecting = s === "reconnecting";
       var isFailed = s === "failed";
 
+      if (isConnected) {
+        var serviceStart = Number(st.connected_since_ms);
+        if (Number.isFinite(serviceStart) && serviceStart > 0) {
+          connectedSinceMs = serviceStart;
+        } else if (connectedSinceMs === null) {
+          // Compatibility with a service installed before connected_since_ms was added.
+          connectedSinceMs = Date.now();
+        }
+        if (!uptimeTimer) uptimeTimer = setInterval(refreshUptime, 1000);
+      } else {
+        connectedSinceMs = null;
+        if (uptimeTimer) clearInterval(uptimeTimer);
+        uptimeTimer = null;
+      }
+      refreshUptime();
+
       connectBtn.className = "connect-btn" +
         (isConnected ? " active" : (isStarting ? " starting" : " inactive"));
 
       if (isConnected) {
         statusText.textContent = "Подключено";
         statusText.style.color = "var(--md-sys-color-primary)";
-        if (!uptimeTimer) {
-          uptimeTimer = setInterval(function () {
-            uptimeSeconds++;
-            uptimeText.textContent = formatUptime(uptimeSeconds);
-          }, 1000);
-        }
       } else if (isStarting) {
         statusText.textContent = "Подключение";
         statusText.style.color = "var(--md-sys-color-primary)";
@@ -153,12 +168,6 @@
       } else {
         statusText.textContent = "Отключено";
         statusText.style.color = "var(--md-sys-color-on-surface-variant)";
-        if (uptimeTimer) {
-          clearInterval(uptimeTimer);
-          uptimeTimer = null;
-        }
-        uptimeSeconds = 0;
-        uptimeText.textContent = "00:00:00";
       }
 
       statIp.setValue(st.client_ip || "");

@@ -7,7 +7,8 @@
 [CmdletBinding()]
 param(
     [string]$Version,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$RequireInstaller
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,7 +31,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     if (-not (Test-Path $svcCargoToml)) {
         throw "Не найден файл $svcCargoToml для чтения версии по умолчанию"
     }
-    $tomlLines = Get-Content -Path $svcCargoToml
+    $tomlLines = Get-Content -Path $svcCargoToml -Encoding UTF8
     foreach ($line in $tomlLines) {
         if ($line -match '^\s*version\s*=\s*["'']([^"'']+)["'']') {
             $Version = $matches[1]
@@ -49,7 +50,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 $rustClientCargoToml = Join-Path $RustClientDir 'Cargo.toml'
 $clientBinName = 'client'
 if (Test-Path $rustClientCargoToml) {
-    $clientTomlLines = Get-Content -Path $rustClientCargoToml
+    $clientTomlLines = Get-Content -Path $rustClientCargoToml -Encoding UTF8
     $inBin = $false
     $foundBin = $false
     $pkgName = ''
@@ -161,7 +162,12 @@ if (-not (Test-Path $DistDir)) {
 }
 
 if (Test-Path $DistVerDir) {
-    Remove-Item -Recurse -Force -Path $DistVerDir
+    $canonicalDistDir = [System.IO.Path]::GetFullPath($DistDir) + [System.IO.Path]::DirectorySeparatorChar
+    $canonicalDistVerDir = [System.IO.Path]::GetFullPath($DistVerDir)
+    if (-not $canonicalDistVerDir.StartsWith($canonicalDistDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Путь '$DistVerDir' выходит за пределы каталога дистрибутива '$DistDir'. Удаление отменено."
+    }
+    Remove-Item -LiteralPath $canonicalDistVerDir -Recurse -Force
 }
 $null = New-Item -ItemType Directory -Force -Path $DistVerDir
 
@@ -204,6 +210,11 @@ if (Test-Path $licensePath) {
     Write-Warning "Файл LICENSE ($licensePath) не найден."
 }
 
+$releaseNotes = Join-Path $RepoRoot "docs\releases\$Version.md"
+if (Test-Path -LiteralPath $releaseNotes) {
+    Copy-Item -LiteralPath $releaseNotes -Destination (Join-Path $DistDir "RELEASE-NOTES-v$Version.md") -Force
+}
+
 # 7. Архивация в dist\csqtt-win-<ver>-windows-x64.zip и запись SHA256
 $zipPath = Join-Path $DistDir "$DistFolderName.zip"
 if (Test-Path $zipPath) {
@@ -231,6 +242,13 @@ $cmdIscc = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
 if ($cmdIscc) {
     $isccExe = $cmdIscc.Source
 } else {
+    # Локальный компилятор в дереве репозитория (.tools/inno-setup/ISCC.exe)
+    $toolsIscc = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot '.tools\inno-setup\ISCC.exe'))
+    if (Test-Path $toolsIscc) {
+        $isccExe = $toolsIscc
+    }
+}
+if (-not $isccExe) {
     $pf86 = [System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
     if (-not [string]::IsNullOrEmpty($pf86)) {
         $candidate = Join-Path $pf86 'Inno Setup 6\ISCC.exe'
@@ -238,15 +256,24 @@ if ($cmdIscc) {
             $isccExe = $candidate
         }
     }
-    if (-not $isccExe) {
-        $candidateToolchain = $env:CSQTT_ISCC
-        if ($candidateToolchain -and (Test-Path $candidateToolchain)) {
-            $isccExe = $candidateToolchain
-        }
+}
+if (-not $isccExe) {
+    $candidateToolchain = $env:CSQTT_ISCC
+    if ($candidateToolchain -and (Test-Path $candidateToolchain)) {
+        $isccExe = $candidateToolchain
     }
 }
 
 $issPath = Join-Path $WindowsDir 'installer\csqtt-win.iss'
+
+if ($RequireInstaller) {
+    if (-not $isccExe) {
+        throw "Флаг -RequireInstaller указан, но ISCC.exe не найден. Проверьте PATH, переменную CSQTT_ISCC или поместите компилятор в .tools\inno-setup\ISCC.exe."
+    }
+    if (-not (Test-Path $issPath)) {
+        throw "Флаг -RequireInstaller указан, но файл скрипта инсталлятора не найден: $issPath"
+    }
+}
 
 if ($isccExe) {
     if (Test-Path $issPath) {
@@ -256,6 +283,19 @@ if ($isccExe) {
             throw "Ошибка компиляции инсталлятора Inno Setup (код выхода: $LASTEXITCODE)"
         }
         Write-Host "Инсталлятор Inno Setup успешно создан в $DistDir"
+
+        # Вычисление SHA256 для setup.exe
+        $setupExe = Join-Path $DistDir "csqtt-win-$Version-setup.exe"
+        if (Test-Path $setupExe) {
+            $setupHash = (Get-FileHash -Path $setupExe -Algorithm SHA256).Hash
+            Write-Host "SHA256 инсталлятора: $setupHash"
+            $setupSha256File = Join-Path $DistDir "csqtt-win-$Version-setup.exe.sha256"
+            $setupShaContent = "$setupHash  csqtt-win-$Version-setup.exe"
+            Set-Content -Path $setupSha256File -Value $setupShaContent -Encoding ASCII
+            Write-Host "Контрольная сумма SHA256 инсталлятора сохранена в $setupSha256File"
+        } else {
+            Write-Warning "Файл инсталлятора $setupExe не найден после сборки — SHA256 не записан."
+        }
     } else {
         Write-Host "Файл скрипта инсталлятора не найден ($issPath). Создание инсталлятора пропущено."
     }

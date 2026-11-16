@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "csqtt-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "csqtt-deploy",
@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "csqtt-deploy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "csqtt-logic",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "csqtt-ipc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -488,7 +488,7 @@ dependencies = [
 
 [[package]]
 name = "csqtt-logic"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm 0.10.3",
  "base64 0.22.1",
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "csqtt-svc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

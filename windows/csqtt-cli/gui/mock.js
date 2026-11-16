@@ -117,11 +117,12 @@
     dns: "",
     active_workers: 0,
     bytes_up: 0,
-    bytes_down: 0
+    bytes_down: 0,
+    connected_since_ms: null
   };
 
   var mockLogs = [
-    "[NET] Служба csqtt-win запущена (режим Mock 0.1.0)",
+    "[NET] Служба csqtt-win запущена (режим Mock 0.1.1)",
     "[OK] Конфигурация проверена: профиль 0 готов",
     "[OK] Инициализирован стек протокола WRAP-SRTP"
   ];
@@ -189,7 +190,7 @@
     emitFn = emit;
     return new Promise(function (resolve, reject) {
       if (method === "version") {
-        resolve({ version: "0.1.0-mock" });
+        resolve({ version: "0.1.1-mock" });
         return;
       }
 
@@ -257,12 +258,14 @@
 
         if (cmd === "connect") {
           mockStatus.state = "starting";
+          mockStatus.connected_since_ms = null;
           mockStatus.message = "Запуск соединения...";
           emitStatus();
           emitLog("[OK] Запуск VPN туннеля...");
 
           setTimeout(function () {
             mockStatus.state = "connected";
+            mockStatus.connected_since_ms = Date.now();
             mockStatus.message = "";
             mockStatus.client_ip = "10.8.0.2";
             mockStatus.dns = "1.1.1.1, 8.8.8.8";
@@ -276,6 +279,7 @@
 
         if (cmd === "disconnect") {
           mockStatus.state = "stopped";
+          mockStatus.connected_since_ms = null;
           mockStatus.message = "";
           mockStatus.client_ip = "";
           mockStatus.active_workers = 0;

@@ -4,6 +4,8 @@
 
 | Файл | Изменение | Зачем |
 |------|-----------|-------|
+| `rust-client/direct_relay.rs` | `cfg(windows)`: исключение `!domain` проверяется до кэша прямых IP и исключается из предварительного прямого DNS-разрешения | Кэш прямых IP не отменяет явное исключение VPN; исключение не уходит в прямой DNS-прогрев |
+| `rust-client/sni.rs` | `cfg(windows)`: парсер сохраняет `!domain`; домен и поддомены идут в туннель прежде RU-зон, шаблона, белого списка и IP-исключений | Позволяет «все .ru напрямую, кроме панели»; поведение Android/Unix не меняется |
 | `rust-client/Cargo.toml`, `Cargo.lock` | секция `[target.'cfg(windows)'.dependencies]`: `wintun 0.5.1`, `windows-sys 0.61.2` | Wintun-бэкенд TUN, WinAPI для watchdog и сокетов. На Unix/Android не влияет |
 | `rust-client/tun.rs` | `#![cfg_attr(windows, allow(unused_imports))]`; заглушка `FdReceiver` → `cfg(not(any(unix, windows)))`; `#[cfg(windows)] mod windows` (`tun_windows.rs`) + `pub use windows::{FdReceiver, TunSession}` | Wintun вместо TUN fd: ядро слушает named pipe `\.\pipe\<tun-uds>`, хост пишет имя адаптера + `\n`, ядро открывает адаптер, стартует сессию, отвечает ACK `[1]` (`[0]` при ошибке) |
 | `rust-client/dispatcher.rs` | `cfg_attr(windows, allow(unused_imports))` на `use std::{…}`; заглушка `run_tun` → `cfg(not(any(unix, windows)))`; в конце файла `#[cfg(windows)] mod windows_tun` (`dispatcher_windows.rs`) | `run_tun`/`read_tun`/`write_tun` для Wintun с той же семантикой (горячая замена, TUN_LOST, backoff) |

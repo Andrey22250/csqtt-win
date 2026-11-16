@@ -66,6 +66,9 @@ pub struct StatusInfo {
     pub active_workers: i32,
     pub bytes_up: i64,
     pub bytes_down: i64,
+    /// Start of the current connected period (Unix milliseconds), owned by the service.
+    #[serde(default)]
+    pub connected_since_ms: Option<u64>,
 }
 
 impl Default for StatusInfo {
@@ -78,6 +81,7 @@ impl Default for StatusInfo {
             active_workers: 0,
             bytes_up: 0,
             bytes_down: 0,
+            connected_since_ms: None,
         }
     }
 }
@@ -145,5 +149,15 @@ mod tests {
         assert!(text.contains("\"state\":\"stopped\""));
         let back: Response = decode_line(&line).unwrap();
         assert_eq!(back, Response::Status { status: StatusInfo::default() });
+    }
+
+    #[test]
+    fn status_timestamp_is_optional_for_older_services() {
+        let old = br#"{"state":"connected","message":"","client_ip":"","dns":"","active_workers":0,"bytes_up":0,"bytes_down":0}"#;
+        let mut status: StatusInfo = serde_json::from_slice(old).unwrap();
+        assert_eq!(status.connected_since_ms, None);
+        status.connected_since_ms = Some(1_800_000_000_000);
+        let bytes = encode_line(&Response::Status { status: status.clone() }).unwrap();
+        assert_eq!(decode_line::<Response>(&bytes).unwrap(), Response::Status { status });
     }
 }

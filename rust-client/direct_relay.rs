@@ -138,6 +138,13 @@ async fn run_full_preresolve_task(
     let sem = Arc::new(tokio::sync::Semaphore::new(12));
     let mut handles = Vec::with_capacity(domains_to_resolve.len());
     for domain in domains_to_resolve {
+        // Never pre-resolve tunnel-only domains via the physical connection.
+        #[cfg(windows)]
+        if domain.starts_with('!')
+            || crate::sni::is_vpn_exception(&domain, &domain_routing.load().direct_domains)
+        {
+            continue;
+        }
         let permit = match sem.clone().acquire_owned().await {
             Ok(p) => p,
             Err(_) => return,
@@ -695,6 +702,13 @@ impl DirectRelay {
         }
 
         let domain = self.dns_domain_map.get(&dst_ip);
+        // A shared/cached direct IP must not override a Windows VPN exception.
+        #[cfg(windows)]
+        if config.enabled
+            && domain.as_deref().is_some_and(|d| crate::sni::is_vpn_exception(d, &config.direct_domains))
+        {
+            return false;
+        }
         let verdict = crate::sni::evaluate_route(
             &dst_ip,
             domain.as_deref(),
@@ -1378,6 +1392,31 @@ mod tests {
         assert_eq!(resp_slice[9], 6);
         let flags = resp_slice[33];
         assert_eq!(flags & 0x12, 0x12, "Expected SYN-ACK flags (0x12)");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn vpn_exception_overrides_cached_direct_ip() {
+        let ip: std::net::IpAddr = "93.184.216.34".parse().unwrap();
+        let config = Arc::new(ArcSwap::from_pointee(crate::dispatcher::DomainRoutingConfig {
+            enabled: true, is_whitelist: false, exclude_ru_zones: true,
+            template_domains: false, direct_domains: vec!["!example.ru".into()].into(),
+            ip_routing_enabled: true, ip_is_whitelist: false,
+            ip_rules: vec![crate::sni::IpRule::Single("93.184.216.34".parse().unwrap())].into(),
+        }));
+        let direct_ips = Arc::new(ArcSwap::from_pointee(std::iter::once(ip).collect()));
+        let domains = Arc::new(crate::sni::DnsDomainMap::default());
+        domains.insert(ip, "panel.example.ru".into());
+        let pool = PacketPool::new(4);
+        let (tx, _rx) = mpsc::channel(4);
+        let relay = DirectRelay::new(config, direct_ips, domains, pool.clone(), tx).unwrap();
+        let syn = build_tcp_packet(
+            "10.66.67.2:54321".parse().unwrap(), "93.184.216.34:443".parse().unwrap(),
+            1000, 0, 0x02, &[],
+        ).unwrap();
+        let mut packet = pool.try_acquire().unwrap();
+        packet.extend_tail(syn.len()).unwrap().copy_from_slice(&syn);
+        assert!(!relay.try_handle(&packet).await, "VPN exception must stay on the tunnel path");
     }
 
     #[tokio::test]

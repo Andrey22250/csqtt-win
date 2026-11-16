@@ -88,6 +88,8 @@
   function cleanDomain(raw) {
     if (!raw) return "";
     var s = String(raw).trim().toLowerCase();
+    var forceVpn = s.charAt(0) === "!";
+    if (forceVpn) s = s.slice(1);
     if (s.indexOf("https://") === 0) s = s.slice(8);
     else if (s.indexOf("http://") === 0) s = s.slice(7);
     if (s.indexOf("www.") === 0) s = s.slice(4);
@@ -102,10 +104,11 @@
     if (hashIdx !== -1) s = s.slice(0, hashIdx);
 
     s = s.replace(/^[,;\s.\(\)\[\]"']+|[,;\s.\(\)\[\]"']+$/g, "");
-    return s;
+    return forceVpn && s ? "!" + s : s;
   }
 
   function isValidDomain(domain) {
+    if (domain && domain.charAt(0) === "!") domain = domain.slice(1);
     if (!domain || domain.length < 3 || domain.length > 253) return false;
     var parts = domain.split(".");
     if (parts.length < 2) return false;
@@ -257,43 +260,80 @@
     var box = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", width: "100%" } });
     var search = window.UI.h("input", {
       className: "m3-field-input",
-      attrs: { type: "text", placeholder: "Поиск процесса", autocomplete: "off", spellcheck: "false" },
+      attrs: { type: "text", placeholder: "Поиск процесса", autocomplete: "off", spellcheck: "false",
+               "aria-label": "Поиск запущенного процесса" },
     });
     var searchWrap = window.UI.h("div", { className: "m3-field-container", style: { height: "44px" } }, [search]);
-    var list = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", maxHeight: "340px", overflowY: "auto" } });
+    var list = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", maxHeight: "340px", overflowY: "auto", minHeight: "0" } });
     box.appendChild(searchWrap); box.appendChild(list);
     var all = [];
+    var isLoading = true;
+    var loadError = null;
+    var dlgClosed = false;
     var dlg;
+
     function render() {
-      var q = search.value.trim().toLowerCase();
       list.innerHTML = "";
+      var q = search.value.trim().toLowerCase();
+      if (isLoading) {
+        list.appendChild(window.UI.loadingState("Загрузка процессов…"));
+        return;
+      }
+      if (loadError) {
+        var errBox = window.UI.h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", padding: "8px 0" } });
+        errBox.appendChild(window.UI.h("div", { className: "body-medium text-error", text: "Ошибка: " + loadError }));
+        var retryBtn = window.UI.button({ text: "Повторить", variant: "outlined", className: "compact",
+          onClick: function () { loadError = null; isLoading = true; render(); loadProcesses(); }
+        });
+        errBox.appendChild(retryBtn);
+        list.appendChild(errBox);
+        return;
+      }
       var shown = all.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) >= 0 || p.path.toLowerCase().indexOf(q) >= 0; });
       if (shown.length === 0) {
-        list.appendChild(window.UI.h("div", { className: "body-medium text-muted", text: all.length ? "Ничего не найдено" : "Загрузка…" }));
+        var msg = all.length === 0 ? "Нет запущенных программ" : "Ничего не найдено";
+        list.appendChild(window.UI.h("div", { className: "body-medium text-muted", style: { padding: "8px 0" }, text: msg }));
         return;
       }
       shown.forEach(function (p) {
         var row = window.UI.h("button", {
-          className: "m3-button text",
+          className: "m3-button text proc-picker-row",
           attrs: { type: "button", title: p.path || p.name },
-          style: { justifyContent: "flex-start", textAlign: "left", height: "auto", padding: "6px 10px", flexDirection: "column", alignItems: "flex-start" }
         }, [
-          window.UI.h("span", { className: "body-medium", text: p.name }),
-          window.UI.h("span", { className: "label-small text-muted", text: p.path || "путь недоступен — будет добавлено имя", style: { wordBreak: "break-all" } })
+          window.UI.h("span", { className: "body-medium proc-picker-name", text: p.name }),
+          window.UI.h("span", { className: "label-small text-muted proc-picker-path", text: p.path || "путь недоступен — будет добавлено имя" })
         ]);
         row.addEventListener("click", function () { onPick(p.path || p.name); if (dlg) dlg.close(); });
         list.appendChild(row);
       });
     }
+
+    function loadProcesses() {
+      window.csqtt.listProcesses().then(function (r) {
+        if (dlgClosed) return; // dialog closed before result arrived
+        all = Array.isArray(r) ? r : [];
+        isLoading = false;
+        loadError = null;
+        render();
+      }).catch(function (e) {
+        if (dlgClosed) return;
+        isLoading = false;
+        loadError = (e && e.message) ? e.message : String(e);
+        render();
+      });
+    }
+
     search.addEventListener("input", render);
     dlg = window.UI.dialog({
       title: "Запущенные программы",
       content: box,
-      actions: [{ text: "Закрыть", variant: "text", onClick: function (d) { d.close(); } }]
+      actions: [{ text: "Закрыть", variant: "text", onClick: function (d) { d.close(); } }],
+      onClose: function () { dlgClosed = true; }
     });
     render();
-    window.csqtt.listProcesses().then(function (r) { all = Array.isArray(r) ? r : []; if (!all.length) all = []; render(); })
-      .catch(function (e) { list.innerHTML = ""; list.appendChild(window.UI.h("div", { className: "body-medium", text: "Ошибка: " + (e && e.message || e) })); });
+    loadProcesses();
+    // Focus search after the dialog's open animation starts
+    setTimeout(function () { if (!dlgClosed) search.focus(); }, 80);
   }
 
   function showAppsDialog() {
@@ -606,17 +646,19 @@
   // --- Dialog: Domains Management ---
 
   function showDomainsDialog() {
+    var profileIndex = window.App.state.settings.active_profile || 0;
     var p = window.App.profile() || {};
     var domainIsWhite = !!p.domain_is_whitelist;
-    var templateEnabled = !domainIsWhite && !!p.template_domains_enabled;
+    var templateEnabled = !!p.template_domains_enabled;
+    var ruZonesEnabled = !!p.exclude_ru_zones_enabled;
 
-    var blackRaw = (p.direct_domains_black || "").trim();
-    if (!blackRaw && templateEnabled) {
-      blackRaw = TEMPLATE_DOMAINS.join("\n");
-    } else {
-      blackRaw = parseDomainsFromText(blackRaw).join("\n");
-    }
-    var whiteRaw = parseDomainsFromText(p.direct_domains_white || "").join("\n");
+    var blackRules = parseDomainsFromText(p.direct_domains_black || p.direct_domains || "");
+    var whiteRules = parseDomainsFromText(p.direct_domains_white || "");
+    var exceptions = parseDomainsFromText(blackRules.concat(whiteRules).join(","))
+      .filter(function (d) { return d.charAt(0) === "!"; })
+      .map(function (d) { return d.slice(1); });
+    var blackRaw = blackRules.filter(function (d) { return d.charAt(0) !== "!"; }).join("\n");
+    var whiteRaw = whiteRules.filter(function (d) { return d.charAt(0) !== "!"; }).join("\n");
 
     var currentTextBlack = blackRaw;
     var currentTextWhite = whiteRaw;
@@ -646,43 +688,34 @@
     modeRow.appendChild(whiteBtn);
     content.appendChild(modeRow);
 
+    var modeDescription = window.UI.h("div", { className: "body-small text-muted" });
+    content.appendChild(modeDescription);
+
     // Template Domains Row (visible only in blacklist mode)
     var templateWrap = window.UI.h("div", {
       style: { display: !domainIsWhite ? "block" : "none" }
     });
 
     var templateRow = window.UI.settingRow({
-      title: "Готовый список RU доменов",
-      description: "503 важных доменных имён",
+      title: "Шаблон РФ-сервисов",
+      description: "Российские сервисы из готового списка идут напрямую",
       checked: templateEnabled,
       onCheckedChange: function (enabled) {
         templateEnabled = enabled;
-        var currentList = parseDomainsFromText(textarea.value);
-        if (enabled) {
-          var seen = {};
-          var merged = [];
-          for (var j = 0; j < currentList.length; j++) {
-            var d = currentList[j];
-            if (!seen[d]) { seen[d] = true; merged.push(d); }
-          }
-          for (var k = 0; k < TEMPLATE_DOMAINS.length; k++) {
-            var td = TEMPLATE_DOMAINS[k];
-            if (!seen[td]) { seen[td] = true; merged.push(td); }
-          }
-          currentTextBlack = merged.join("\n");
-          textarea.value = currentTextBlack;
-        } else {
-          var remaining = currentList.filter(function (d) {
-            return !TEMPLATE_DOMAINS_SET[d];
-          });
-          currentTextBlack = remaining.join("\n");
-          textarea.value = currentTextBlack;
-        }
-        updateCounter();
         saveCurrentState();
       }
     });
     templateWrap.appendChild(templateRow);
+    var ruZonesRow = window.UI.settingRow({
+      title: "Российские зоны напрямую",
+      description: ".ru, .su, .рф и другие зоны ядра, включая .by и .kz",
+      checked: ruZonesEnabled,
+      onCheckedChange: function (enabled) {
+        ruZonesEnabled = enabled;
+        saveCurrentState();
+      }
+    });
+    templateWrap.appendChild(ruZonesRow);
     content.appendChild(templateWrap);
 
     var div = window.UI.divider();
@@ -708,12 +741,27 @@
         webkitUserSelect: "text"
       },
       attrs: {
-        placeholder: "Введите домены списком, через запятую или пробел:\nyandex.ru, mail.ru\nkinopoisk.ru",
+        placeholder: "Введите свои домены через запятую, пробел или с новой строки",
+        "aria-label": "Свои домены",
         spellcheck: "false"
       }
     });
     textarea.value = domainIsWhite ? currentTextWhite : currentTextBlack;
     content.appendChild(textarea);
+
+    var exceptionsField = window.UI.textField({
+      label: "Исключения (всегда через VPN)",
+      placeholder: "example.ru, example.ru",
+      value: exceptions.join(", "),
+      onInput: function () { updateCounter(); }
+    });
+    exceptionsField.input.setAttribute("aria-label", "Исключения (всегда через VPN)");
+    content.insertBefore(exceptionsField.el, textarea);
+    content.insertBefore(window.UI.h("div", {
+      className: "body-small text-muted",
+      text: "Включая поддомены. Исключения приоритетнее зон, шаблона и списков IP. Изменения применяются после переподключения."
+    }), textarea);
+    content.insertBefore(window.UI.h("div", { className: "m3-field-label", text: "Свои домены" }), textarea);
 
     // Bottom Action Row
     var bottomRow = window.UI.h("div", {
@@ -743,26 +791,20 @@
     clearBtn.style.height = "36px";
     clearBtn.style.padding = "0 14px";
 
-    var doneBtn = window.UI.button({
-      text: "Готово",
-      variant: "filled",
-      className: "compact"
-    });
-    doneBtn.style.height = "36px";
-    doneBtn.style.padding = "0 16px";
-
     rightBtns.appendChild(clearBtn);
-    rightBtns.appendChild(doneBtn);
     bottomRow.appendChild(rightBtns);
     content.appendChild(bottomRow);
 
     function updateCounter() {
       var parsed = parseDomainsFromText(textarea.value);
-      counterLabel.textContent = "Распознано: " + parsed.length;
+      counterLabel.textContent = "Своих: " + parsed.length + "; через VPN: " + parseDomainsFromText(exceptionsField.getValue()).length;
       clearBtn.style.display = textarea.value.trim().length > 0 ? "inline-flex" : "none";
     }
 
     function updateModeDisplay() {
+      modeDescription.textContent = domainIsWhite
+        ? "Через VPN — только домены из белого списка и исключения. Остальные сайты идут напрямую."
+        : "Домены из чёрного списка идут напрямую. Остальные сайты — через VPN.";
       if (!domainIsWhite) {
         blackBtn.className = "m3-button filled";
         whiteBtn.className = "m3-button outlined";
@@ -776,17 +818,24 @@
 
     function saveCurrentState() {
       var currentMode = domainIsWhite;
-      var curTemplate = currentMode ? false : templateEnabled;
-      var parsedBlack = parseDomainsFromText(currentTextBlack);
-      var parsedWhite = parseDomainsFromText(currentTextWhite);
+      var curTemplate = templateEnabled;
+      var curRuZones = ruZonesEnabled;
+      var forced = parseDomainsFromText(exceptionsField.getValue()).map(function (d) {
+        return d.charAt(0) === "!" ? d : "!" + d;
+      });
+      // Keep VPN exceptions first even when the core's 1024-rule limit is reached.
+      var parsedBlack = parseDomainsFromText(forced.join(",") + "," + currentTextBlack);
+      var parsedWhite = parseDomainsFromText(forced.join(",") + "," + currentTextWhite);
 
       return window.App.saveSettings(function (s) {
-        var prof = s.profiles[s.active_profile || 0];
+        var prof = s.profiles[profileIndex];
         if (!prof) return;
         prof.domain_is_whitelist = currentMode;
         prof.template_domains_enabled = curTemplate;
+        prof.exclude_ru_zones_enabled = curRuZones;
         prof.direct_domains_black = parsedBlack.join(",");
         prof.direct_domains_white = parsedWhite.join(",");
+        prof.direct_domains = prof.direct_domains_black;
       });
     }
 
@@ -824,26 +873,29 @@
         currentTextWhite = "";
       } else {
         currentTextBlack = "";
-        templateEnabled = false;
-        templateRow.setChecked(false);
       }
       textarea.value = "";
       updateCounter();
       saveCurrentState();
     });
 
-    var dlg = window.UI.dialog({
+    var savedOnDone = false;
+    window.UI.dialog({
       title: "Маршрутизация доменов",
       content: content,
       onClose: function () {
-        saveCurrentState();
-      }
-    });
-
-    doneBtn.addEventListener("click", function () {
-      saveCurrentState().then(function () {
-        dlg.close();
-      });
+        if (!savedOnDone) saveCurrentState().catch(function () {});
+      },
+      actions: [{
+        text: "Готово",
+        variant: "filled",
+        onClick: function (d) {
+          saveCurrentState().then(function () {
+            savedOnDone = true;
+            d.close();
+          }).catch(function () {});
+        }
+      }]
     });
 
     updateModeDisplay();
@@ -1187,6 +1239,7 @@
           is_whitelist: isWhiteDomains,
           active_mode: isWhiteDomains ? "whitelist" : "blacklist",
           template_domains: templateDom,
+          exclude_ru_zones: !!p.exclude_ru_zones_enabled,
           blacklist: customBlack,
           whitelist: whiteDom,
           direct_domains: isWhiteDomains ? whiteDom : customBlack
@@ -1299,7 +1352,11 @@
 
             prof.domain_is_whitelist = isWhiteDom;
             prof.template_domains_enabled = isTemplate;
+            if (typeof domObj.exclude_ru_zones === "boolean") {
+              prof.exclude_ru_zones_enabled = domObj.exclude_ru_zones;
+            }
             if (impBlack.length > 0 || !isWhiteDom) prof.direct_domains_black = impBlack.join(",");
+            prof.direct_domains = prof.direct_domains_black;
             if (impWhite.length > 0 || isWhiteDom) prof.direct_domains_white = impWhite.join(",");
             importedAny = true;
           }
@@ -1644,13 +1701,15 @@
       // 2. Domains Subtitle
       var isWhiteDom = !!p.domain_is_whitelist;
       var templateEnabled = !isWhiteDom && !!p.template_domains_enabled;
-      var blackDom = parseDomainsFromText(p.direct_domains_black || "");
+      var blackDom = parseDomainsFromText(p.direct_domains_black || p.direct_domains || "");
       var whiteDom = parseDomainsFromText(p.direct_domains_white || "");
+      var forcedCount = parseDomainsFromText(blackDom.concat(whiteDom).join(","))
+        .filter(function (d) { return d.charAt(0) === "!"; }).length;
+      blackDom = blackDom.filter(function (d) { return d.charAt(0) !== "!"; });
+      whiteDom = whiteDom.filter(function (d) { return d.charAt(0) !== "!"; });
 
       if (isWhiteDom) {
         domainsSubtitle.textContent = "Белый список: " + whiteDom.length + " в туннеле";
-      } else if (blackDom.length === 0) {
-        domainsSubtitle.textContent = "Чёрный список: 0 доменов исключено";
       } else if (templateEnabled) {
         var customCount = 0;
         for (var dIdx = 0; dIdx < blackDom.length; dIdx++) {
@@ -1659,11 +1718,13 @@
         if (customCount > 0) {
           domainsSubtitle.textContent = "Исключено: " + TEMPLATE_DOMAINS.length + " готовых + " + customCount + " своих";
         } else {
-          domainsSubtitle.textContent = "Исключено: " + blackDom.length + " (Готовый список RU)";
+          domainsSubtitle.textContent = "Шаблон РФ-сервисов: включён";
         }
       } else {
         domainsSubtitle.textContent = "Чёрный список: " + blackDom.length + " исключено";
       }
+      if (!isWhiteDom && p.exclude_ru_zones_enabled) domainsSubtitle.textContent += "; зоны напрямую";
+      if (forcedCount) domainsSubtitle.textContent += "; всегда через VPN: " + forcedCount;
 
       // 3. IPs Subtitle
       var isWhiteIps = !!p.ip_is_whitelist;

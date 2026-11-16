@@ -58,6 +58,16 @@ impl Default for ServerState {
 
 /// Updates StatusInfo with a manager Status event.
 pub fn apply_status(info: &mut StatusInfo, status: &MgrStatus) {
+    if matches!(status, MgrStatus::Connected { .. }) {
+        if info.state != TunnelState::Connected || info.connected_since_ms.is_none() {
+            info.connected_since_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok());
+        }
+    } else {
+        info.connected_since_ms = None;
+    }
     match status {
         MgrStatus::Stopped => {
             info.state = TunnelState::Stopped;
@@ -617,6 +627,13 @@ mod tests {
         assert_eq!(info.state, TunnelState::Connected);
         assert_eq!(info.client_ip, "10.0.0.2");
         assert_eq!(info.dns, "1.1.1.1,8.8.8.8");
+        assert!(info.connected_since_ms.is_some());
+        // Duplicate Connected events must not restart the timer for existing windows.
+        info.connected_since_ms = Some(1234);
+        apply_status(&mut info, &MgrStatus::Connected {
+            client_ip: "10.0.0.2".into(), dns: "1.1.1.1,8.8.8.8".into(),
+        });
+        assert_eq!(info.connected_since_ms, Some(1234));
 
         apply_status(
             &mut info,
@@ -625,6 +642,7 @@ mod tests {
             },
         );
         assert_eq!(info.state, TunnelState::Reconnecting);
+        assert_eq!(info.connected_since_ms, None);
         assert_eq!(info.message, "peer timeout");
 
         apply_status(&mut info, &MgrStatus::Paused);
@@ -642,6 +660,7 @@ mod tests {
         info.active_workers = 12;
         apply_status(&mut info, &MgrStatus::Stopped);
         assert_eq!(info.state, TunnelState::Stopped);
+        assert_eq!(info.connected_since_ms, None);
         assert_eq!(info.active_workers, 0);
         assert_eq!(info.client_ip, "");
         assert_eq!(info.dns, "");
@@ -689,7 +708,7 @@ mod tests {
         match resp {
             Response::Hello { version, service_version } => {
                 assert_eq!(version, PROTOCOL_VERSION);
-                assert_eq!(service_version, "0.1.0");
+                assert_eq!(service_version, "0.1.1");
             }
             _ => panic!("unexpected response"),
         }

@@ -67,6 +67,8 @@
   var nextId = 1;
   var linkCache = {};
   var linkPending = {};
+  // Serialize the entire read/modify/write transaction to prevent lost settings.
+  var settingsQueue = Promise.resolve();
   var hosted = !!(window.chrome && window.chrome.webview);
 
   function emit(event, data) {
@@ -158,13 +160,17 @@
       return ipc({ cmd: "set_settings", settings: settings }).then(function () {});
     },
     updateSettings: function (mutate) {
-      return csqtt.getSettings().then(function (settings) {
-        mutate(settings);
-        return csqtt.setSettings(settings).then(function () {
-          emit("settings", { settings: settings });
-          return settings;
+      var update = settingsQueue.then(function () {
+        return csqtt.getSettings().then(function (settings) {
+          mutate(settings);
+          return csqtt.setSettings(settings).then(function () {
+            emit("settings", { settings: settings });
+            return settings;
+          });
         });
       });
+      settingsQueue = update.catch(function () {});
+      return update;
     },
     setSecret: function (key, value) {
       return ipc({ cmd: "set_secret", key: key, value: value }).then(function () {});

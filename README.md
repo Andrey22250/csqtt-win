@@ -40,9 +40,21 @@
 powershell -NoProfile -File scripts\windows\package.ps1
 ```
 
-Путь к `ISCC.exe` можно задать переменной `CSQTT_ISCC`. Результат: `dist\csqtt-win-<версия>-setup.exe` и портативный zip.
+Только упаковка и сборка инсталлятора (без пересборки Rust, с обязательным созданием setup.exe):
+
+```powershell
+powershell -NoProfile -File scripts\windows\package.ps1 -SkipBuild -RequireInstaller
+```
+
+Путь к `ISCC.exe` можно задать переменной `CSQTT_ISCC`, либо поместить компилятор Inno Setup 6 в `.tools\inno-setup\ISCC.exe` в корне репозитория (каталог `.tools` исключён из git). Результат: `dist\csqtt-win-<версия>-setup.exe` и портативный zip.
 
 Подробное руководство пользователя: [windows/README-windows.md](windows/README-windows.md).
+
+## Версии и проверки
+
+Исходники, сценарии упаковки, [проверки интерфейса](scripts/windows/tests/README.md) и [описания релизов](docs/releases/0.1.1.md) хранятся в этом репозитории. Готовые установщики, архивы и SHA-256 находятся в `dist/`; инструменты сборки — в `.tools/`. Эти два каталога исключены из Git.
+
+Каждая выпущенная версия фиксируется коммитом и аннотированным тегом `v<версия>` (например, `v0.1.1`). Номер согласован в Windows-пакетах Cargo и скрипте установщика. Версия upstream-ядра учитывается отдельно. Публикация в удалённый репозиторий выполняется отдельным действием.
 
 ## Лицензия
 

@@ -150,63 +150,94 @@
     });
   }
 
+  // Snapshot of the last visible screen list used to build nav buttons,
+  // so we can skip full DOM reconstruction when only indicators change.
+  var _navLastVisible = null;
+
   function renderNavBar() {
     var nav = document.getElementById("nav-bar");
     if (!nav) return;
-    nav.innerHTML = "";
 
     var visible = getVisibleScreenOrder();
 
     if (visible.length <= 1) {
       nav.classList.add("hidden");
+      _navLastVisible = null;
+      nav.innerHTML = "";
       return;
     }
     nav.classList.remove("hidden");
 
-    var track = window.UI.h("div", { className: "nav-track" });
-    var indicator = window.UI.h("div", { className: "nav-indicator-pill" });
-    track.appendChild(indicator);
-
-    var count = visible.length;
-    var itemWidthPercent = 100 / count;
-    indicator.style.width = itemWidthPercent + "%";
-
-    visible.forEach(function (id, idx) {
+    // Rebuild buttons only when the set/order/labels/icons of visible screens change.
+    var visibleKey = visible.map(function (id) {
       var scr = screens[id];
-      if (!scr) return;
-      var isSel = id === currentScreenId;
+      return id + ":" + (scr ? (scr.title || id) + ":" + (scr.icon || "Info") : "");
+    }).join("|");
 
-      var item = window.UI.h("button", {
-        className: "nav-item" + (isSel ? " selected" : ""),
-        attrs: { type: "button", "data-screen-id": id },
-        on: {
-          click: function () {
-            showScreen(id);
+    if (_navLastVisible !== visibleKey) {
+      _navLastVisible = visibleKey;
+      nav.innerHTML = "";
+
+      var track = window.UI.h("div", { className: "nav-track" });
+      var indicator = window.UI.h("div", { className: "nav-indicator-pill" });
+      track.appendChild(indicator);
+
+      var count = visible.length;
+      var itemWidthPercent = 100 / count;
+      indicator.style.width = itemWidthPercent + "%";
+
+      visible.forEach(function (id) {
+        var scr = screens[id];
+        if (!scr) return;
+
+        var item = window.UI.h("button", {
+          className: "nav-item",
+          attrs: { type: "button", "data-screen-id": id },
+          on: {
+            click: function () {
+              showScreen(id);
+            }
           }
-        }
+        });
+
+        var iconWrap = window.UI.h("div", { className: "nav-item-icon-wrap" });
+        var iconName = scr.icon || "Info";
+        var iconEl = window.Icons.el(iconName, 22);
+        iconWrap.appendChild(iconEl);
+
+        // Badge placeholder – updated in-place by updateNavBadges()
+        var badge = window.UI.h("span", { className: "nav-badge", attrs: { "data-badge": "1" } });
+        badge.style.display = "none";
+        iconWrap.appendChild(badge);
+
+        item.appendChild(iconWrap);
+        var label = window.UI.h("span", { className: "label-small", text: scr.title || id });
+        item.appendChild(label);
+        track.appendChild(item);
       });
 
-      var iconWrap = window.UI.h("div", { className: "nav-item-icon-wrap" });
-      var iconName = scr.icon || "Info";
-      var iconEl = window.Icons.el(iconName, 22);
-      iconWrap.appendChild(iconEl);
+      nav.appendChild(track);
+    }
 
-      if (id === "logs" && state.unreadErrors > 0 && currentScreenId !== "logs") {
-        var badge = window.UI.h("span", {
-          className: "nav-badge",
-          text: String(state.unreadErrors)
-        });
-        iconWrap.appendChild(badge);
-      }
-      item.appendChild(iconWrap);
-
-      var label = window.UI.h("span", { className: "label-small", text: scr.title || id });
-      item.appendChild(label);
-      track.appendChild(item);
-    });
-
-    nav.appendChild(track);
     updateNavIndicator();
+    updateNavBadges();
+  }
+
+  function updateNavBadges() {
+    var nav = document.getElementById("nav-bar");
+    if (!nav) return;
+    var items = nav.querySelectorAll(".nav-item");
+    for (var i = 0; i < items.length; i++) {
+      var id = items[i].getAttribute("data-screen-id");
+      var badge = items[i].querySelector(".nav-badge");
+      if (!badge) continue;
+      if (id === "logs" && state.unreadErrors > 0 && currentScreenId !== "logs") {
+        badge.textContent = String(state.unreadErrors);
+        badge.style.display = "";
+      } else {
+        badge.style.display = "none";
+      }
+    }
   }
 
   function updateNavIndicator() {
@@ -274,6 +305,7 @@
     container.classList.remove("hidden");
 
     updateNavIndicator();
+    updateNavBadges();
     if (scr.onShow) {
       try { scr.onShow(); } catch (e) { console.error(e); }
     }
@@ -679,7 +711,8 @@
       var isErr = line.indexOf("ERR") !== -1 || line.indexOf("ОШИБКА") !== -1 || line.indexOf("ФАТАЛ") !== -1;
       if (isErr && currentScreenId !== "logs") {
         state.unreadErrors++;
-        renderNavBar();
+        // Only update badges in-place; never rebuild buttons just for a badge change
+        updateNavBadges();
       }
     }
   });

@@ -627,12 +627,23 @@
     opts = opts || {};
     var root = document.getElementById("dialog-root") || document.body;
 
+    // Remember focused element so we can restore it when this dialog closes
+    var priorFocus = document.activeElement;
+
     var overlay = h("div", { className: "dialog-overlay" });
-    var card = h("div", { className: "dialog-card" });
+    var card = h("div", {
+      className: "dialog-card",
+      attrs: { role: "dialog", "aria-modal": "true", "aria-labelledby": "" }
+    });
 
     var header = h("div", { className: "dialog-header" });
+    var titleId = "dlg-title-" + (Math.random() * 1e9 | 0);
     var title = h("h3", { className: "title-medium", text: opts.title || "" });
+    title.id = titleId;
+    card.setAttribute("aria-labelledby", titleId);
     header.appendChild(title);
+
+    var closed = false;
 
     var closeBtn = iconButton({
       icon: "Close",
@@ -674,8 +685,17 @@
       overlay.classList.add("active");
     });
 
+    // Only the topmost overlay (last child of root) handles Escape
     function onKey(e) {
-      if (e.key === "Escape") api.close();
+      if (e.key === "Escape") {
+        // Check we are still the topmost dialog
+        var overlays = root.querySelectorAll(".dialog-overlay");
+        var last = overlays[overlays.length - 1];
+        if (last === overlay) {
+          e.stopPropagation();
+          api.close();
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
 
@@ -686,11 +706,20 @@
     var api = {
       el: overlay,
       close: function () {
+        if (closed) return;
+        closed = true;
         window.removeEventListener("keydown", onKey);
         overlay.classList.remove("active");
         setTimeout(function () {
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
           if (opts.onClose) opts.onClose();
+          // Only restore focus if this was actually the topmost dialog
+          // (i.e. no other overlay was opened on top of us after we closed)
+          var remaining = root.querySelectorAll(".dialog-overlay");
+          if (priorFocus && priorFocus.isConnected && priorFocus.focus
+              && (remaining.length === 0 || remaining[remaining.length - 1].contains(priorFocus))) {
+            try { priorFocus.focus(); } catch (_) {}
+          }
         }, 180);
       }
     };

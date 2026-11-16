@@ -4,3 +4,4 @@ scripts/windows/cache/
 BRIEF.md
 CLAUDE.md
 target/
+/.tools/
